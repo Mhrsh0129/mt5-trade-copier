@@ -3,6 +3,20 @@ name = "trade-copier"
 version = "0.1.0"
 description = "Self-hosted MT5 trade copier: 1 master -> up to 10 slaves, with web dashboard"
 requires-python = ">=3.11"
+dependencies = [
+    "SQLAlchemy>=2.0",
+    "cryptography>=42.0",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",
+    "itsdangerous>=2.1",
+    "httpx>=0.27",
+    "MetaTrader5>=5.0.45; sys_platform == 'win32'",
+    "psutil>=5.9; sys_platform == 'win32'",
+    "pyzmq>=25.1; sys_platform == 'win32'",
+    "argon2-cffi>=23.1; sys_platform == 'win32'",
+]
 
 [project.scripts]
 tc = "copier.cli:main"
