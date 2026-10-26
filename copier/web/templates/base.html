@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}MT5 Trade Copier{% endblock %}</title>
+  <style>
+    :root {
+      --bg: #0f172a; --panel: #1e293b; --border: #334155;
+      --text: #f8fafc; --muted: #94a3b8; --accent: #38bdf8;
+      --green: #22c55e; --amber: #f59e0b; --red: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.5;
+    }
+    header {
+      background: #0b1120; border-bottom: 1px solid var(--border);
+      padding: 0.75rem 1.5rem; display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 1rem;
+    }
+    .brand { font-weight: 700; font-size: 1.1rem; color: var(--accent); text-decoration: none; }
+    nav { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+    nav a {
+      color: var(--muted); text-decoration: none; padding: 0.35rem 0.65rem;
+      border-radius: 6px; font-size: 0.92rem;
+    }
+    nav a:hover, nav a.active { color: var(--text); background: var(--panel); }
+    main { max-width: 1320px; margin: 1.5rem auto; padding: 0 1.25rem; }
+    .card {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 8px; padding: 1.25rem; margin-bottom: 1.25rem;
+    }
+    h1, h2, h3 { margin-top: 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td {
+      text-align: left; padding: 0.6rem 0.75rem;
+      border-bottom: 1px solid var(--border); vertical-align: middle;
+    }
+    th { color: var(--muted); font-weight: 600; font-size: 0.82rem; text-transform: uppercase; }
+    input, select, textarea {
+      background: #0f172a; color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: 0.45rem 0.65rem; font-size: 0.9rem;
+    }
+    button, .btn {
+      background: var(--accent); color: #0f172a; border: none; border-radius: 6px;
+      padding: 0.48rem 0.9rem; font-weight: 600; font-size: 0.88rem; cursor: pointer;
+      text-decoration: none; display: inline-block;
+    }
+    button.secondary, .btn.secondary { background: #334155; color: var(--text); }
+    button.danger, .btn.danger { background: var(--red); color: #fff; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      padding: 0.18rem 0.55rem; border-radius: 999px; font-size: 0.78rem; font-weight: 600;
+    }
+    .badge.connected { background: rgba(34,197,94,0.16); color: #4ade80; }
+    .badge.disconnected { background: rgba(148,163,184,0.18); color: #cbd5e1; }
+    .badge.error { background: rgba(239,68,68,0.18); color: #f87171; }
+    .alert {
+      padding: 0.75rem 1rem; border-radius: 6px; margin-bottom: 1rem; border: 1px solid var(--border);
+    }
+    .alert.ok { background: rgba(34,197,94,0.15); border-color: var(--green); color: #86efac; }
+    .alert.err { background: rgba(239,68,68,0.15); border-color: var(--red); color: #fca5a5; }
+    .alert.warn { background: rgba(245,158,11,0.15); border-color: var(--amber); color: #fde68a; }
+    .grid-form {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 0.75rem; align-items: end;
+    }
+    .field label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.25rem; }
+    .field input, .field select { width: 100%; }
+    .muted { color: var(--muted); font-size: 0.85rem; }
+    code { background: #0b1120; padding: 0.15rem 0.35rem; border-radius: 4px; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  {% if session %}
+  <header>
+    <a class="brand" href="/accounts">MT5 Trade Copier</a>
+    <nav>
+      <a href="/accounts" class="{% if nav == 'accounts' %}active{% endif %}">Accounts</a>
+      <a href="/slaves" class="{% if nav == 'slaves' %}active{% endif %}">Slave Settings</a>
+      <a href="/trades" class="{% if nav == 'trades' %}active{% endif %}">Live Trades</a>
+      <a href="/logs" class="{% if nav == 'logs' %}active{% endif %}">Logs</a>
+      <a href="/system" class="{% if nav == 'system' %}active{% endif %}">System</a>
+      <form method="post" action="/logout" style="margin:0">
+        <input type="hidden" name="csrf" value="{{ session.csrf }}">
+        <button type="submit" class="secondary">Logout</button>
+      </form>
+    </nav>
+  </header>
+  {% endif %}
+  <main>
+    {% if flash_ok %}<div class="alert ok">{{ flash_ok }}</div>{% endif %}
+    {% if flash_err %}<div class="alert err">{{ flash_err }}</div>{% endif %}
+    {% if flash_warn %}<div class="alert warn">{{ flash_warn }}</div>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

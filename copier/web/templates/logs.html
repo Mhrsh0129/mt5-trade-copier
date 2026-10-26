@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Logs · MT5 Trade Copier{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>System & Account Logs</h2>
+  <form method="get" action="/logs" class="grid-form" style="margin-bottom:1rem;">
+    <div class="field">
+      <label>Filter by Account ID</label>
+      <input name="account_id" type="number" value="{{ account_id if account_id is not none else '' }}" placeholder="All">
+    </div>
+    <div class="field">
+      <label>Level</label>
+      <select name="level">
+        <option value="">All Levels</option>
+        <option value="info" {% if level == 'info' %}selected{% endif %}>Info</option>
+        <option value="warn" {% if level == 'warn' %}selected{% endif %}>Warn</option>
+        <option value="error" {% if level == 'error' %}selected{% endif %}>Error</option>
+      </select>
+    </div>
+    <div>
+      <button type="submit" class="secondary">Filter</button>
+    </div>
+  </form>
+  <table>
+    <thead>
+      <tr><th>Time (UTC)</th><th>Level</th><th>Account</th><th>Source</th><th>Message</th></tr>
+    </thead>
+    <tbody>
+      {% for e in events %}
+      <tr>
+        <td class="muted">{{ e.ts.strftime("%Y-%m-%d %H:%M:%S") if e.ts else "-" }}</td>
+        <td><span class="badge {% if e.level == 'error' %}error{% elif e.level == 'warn' %}disconnected{% else %}connected{% endif %}">{{ e.level }}</span></td>
+        <td>{{ ("#" ~ e.account_id) if e.account_id else "System" }}</td>
+        <td><code>{{ e.source }}</code></td>
+        <td>{{ e.message }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="muted">No log entries found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

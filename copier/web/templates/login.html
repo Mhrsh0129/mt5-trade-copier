@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Admin Login · MT5 Trade Copier{% endblock %}
+{% block content %}
+<div class="card" style="max-width:420px;margin:4rem auto;">
+  <h2>Admin Login</h2>
+  {% if not admin_initialized %}
+    <div class="alert warn">
+      First run: enter an admin password (min 8 characters) to initialize the dashboard.
+    </div>
+  {% endif %}
+  {% if error %}
+    <div class="alert err">{{ error }}</div>
+  {% endif %}
+  <form method="post" action="/login">
+    <div class="field" style="margin-bottom:1rem;">
+      <label for="password">Admin Password</label>
+      <input id="password" type="password" name="password" required autofocus>
+    </div>
+    <button type="submit" style="width:100%;">Sign In</button>
+  </form>
+</div>
+{% endblock %}

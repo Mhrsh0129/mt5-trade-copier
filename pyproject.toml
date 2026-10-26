@@ -1,0 +1,15 @@
+[project]
+name = "trade-copier"
+version = "0.1.0"
+description = "Self-hosted MT5 trade copier: 1 master -> up to 10 slaves, with web dashboard"
+requires-python = ">=3.11"
+
+[project.scripts]
+tc = "copier.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["copier*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

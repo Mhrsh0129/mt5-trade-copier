@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Live Trades & Audit · MT5 Trade Copier{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+    <h2 style="margin:0;">Active Ticket Maps (Master ↔ Slave)</h2>
+    <form method="post" action="/trades/reconcile" style="margin:0;">
+      <input type="hidden" name="csrf" value="{{ session.csrf }}">
+      <button type="submit" class="secondary">Reconcile All Slaves Now</button>
+    </form>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Slave</th>
+        <th>Kind</th>
+        <th>Master Ticket</th>
+        <th>Slave Ticket</th>
+        <th>Slave Symbol</th>
+        <th>Master Lot</th>
+        <th>Slave Lot</th>
+        <th>SL / TP</th>
+        <th>State</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in ticket_maps %}
+      <tr>
+        <td>#{{ m.slave_id }}</td>
+        <td>{{ m.kind }}</td>
+        <td><code>#{{ m.master_position_id }}</code></td>
+        <td><code>#{{ m.slave_position_id or m.slave_order_id or "-" }}</code></td>
+        <td><code>{{ m.slave_symbol or "-" }}</code></td>
+        <td>{{ m.master_volume or "-" }}</td>
+        <td>{{ m.slave_volume or "-" }}</td>
+        <td>{{ m.sl or 0.0 }} / {{ m.tp or 0.0 }}</td>
+        <td><span class="badge {% if m.state == 'open' %}connected{% elif m.state == 'failed' %}error{% else %}disconnected{% endif %}">{{ m.state }}</span></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" class="muted">No active mapped trades right now.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h2>Trade Copy Audit & Latency</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Time (UTC)</th>
+        <th>Slave</th>
+        <th>Event</th>
+        <th>Master Ticket</th>
+        <th>Symbol (M → S)</th>
+        <th>Lots (M → Req → Fill)</th>
+        <th>Result</th>
+        <th>Latency</th>
+        <th>Detail</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in audits %}
+      <tr>
+        <td class="muted">{{ a.ts.strftime("%H:%M:%S.%f")[:-3] if a.ts else "-" }}</td>
+        <td>#{{ a.slave_id or "-" }}</td>
+        <td><code>{{ a.event_type }}</code></td>
+        <td><code>#{{ a.master_position_id or "-" }}</code></td>
+        <td>{{ a.master_symbol or "-" }} → <code>{{ a.slave_symbol or "-" }}</code></td>
+        <td>{{ a.master_lot or "-" }} → {{ a.requested_lot or "-" }} → <strong>{{ a.filled_lot if a.filled_lot is not none else "-" }}</strong></td>
+        <td>
+          <span class="badge {% if a.result == 'ok' %}connected{% elif a.result == 'failed' %}error{% else %}disconnected{% endif %}">
+            {{ a.result }}
+          </span>
+        </td>
+        <td><strong>{{ a.latency_ms if a.latency_ms is not none else "-" }} ms</strong></td>
+        <td class="muted">{{ a.detail or a.retcode or "" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" class="muted">No trade audit entries yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

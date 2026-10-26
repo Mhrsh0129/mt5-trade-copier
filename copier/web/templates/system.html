@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}System & Alerts · MT5 Trade Copier{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Laptop Resilience, Alerts & Heartbeat</h2>
+  <p>
+    Internet Status:
+    {% if internet_online %}
+      <span class="badge connected">● ONLINE</span>
+    {% else %}
+      <span class="badge error">● OFFLINE (Copying Paused)</span>
+    {% endif %}
+    &nbsp;·&nbsp;
+    Global Copy Switch:
+    {% if global_paused %}
+      <span class="badge error">PAUSED</span>
+    {% else %}
+      <span class="badge connected">ACTIVE</span>
+    {% endif %}
+  </p>
+  <form method="post" action="/system/toggle-pause" style="margin-bottom:1.5rem;">
+    <input type="hidden" name="csrf" value="{{ session.csrf }}">
+    <button type="submit" class="secondary">
+      {{ "Resume Global Copying" if global_paused else "Pause All Copying Globally" }}
+    </button>
+  </form>
+
+  <h3>Telegram Alerts & External Heartbeat</h3>
+  <form method="post" action="/system/alerts" class="grid-form">
+    <input type="hidden" name="csrf" value="{{ session.csrf }}">
+    <div class="field">
+      <label>Telegram Bot Token (Encrypted at rest)</label>
+      <input name="bot_token" type="password" placeholder="{{ '•••••••• (configured)' if has_bot_token else '123456:ABC-DEF...' }}">
+    </div>
+    <div class="field">
+      <label>Telegram Chat ID</label>
+      <input name="chat_id" value="{{ chat_id or '' }}" placeholder="e.g. 987654321">
+    </div>
+    <div class="field" style="grid-column: span 2;">
+      <label>External Heartbeat Ping URL (e.g. https://hc-ping.com/your-uuid)</label>
+      <input name="heartbeat_url" value="{{ heartbeat_url or '' }}" placeholder="https://hc-ping.com/...">
+    </div>
+    <div>
+      <button type="submit">Save Alert Settings</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

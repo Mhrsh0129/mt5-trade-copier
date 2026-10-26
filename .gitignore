@@ -1,0 +1,14 @@
+.venv/
+.vercel/
+__pycache__/
+*.pyc
+.pytest_cache/
+/data/
+*.db
+*.db-wal
+*.db-shm
+/logs/
+/terminals/
+/secrets/
+*.key
+*.dpapi

@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+{% block title %}Accounts · MT5 Trade Copier{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Accounts (1 Master → up to 10 Slaves)</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Role</th>
+        <th>Broker / Server</th>
+        <th>Login / Name</th>
+        <th>Status</th>
+        <th>Balance / Leverage</th>
+        <th>RAM</th>
+        <th>Last Sync</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="accounts-tbody">
+      {% for a in accounts %}
+      <tr>
+        <td>#{{ a.id }}</td>
+        <td><strong>{{ a.role|upper }}</strong></td>
+        <td>{{ a.broker }}<br><span class="muted">{{ a.server }}</span></td>
+        <td><code>{{ a.login }}</code>{% if a.account_name %}<br><span class="muted">{{ a.account_name }}</span>{% endif %}</td>
+        <td>
+          {% if a.status == 'connected' %}
+            <span class="badge connected">● Connected</span>
+          {% elif a.status == 'error' %}
+            <span class="badge error">● Error</span>
+            {% if a.last_error %}<div class="muted" style="color:#fca5a5;max-width:300px;">{{ a.last_error }}</div>{% endif %}
+          {% else %}
+            <span class="badge disconnected">○ Disconnected</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if a.balance is not none %}
+            {{ "{:,.2f}".format(a.balance) }} {{ a.currency or "" }}
+            <br><span class="muted">1:{{ a.leverage or "-" }} · {{ a.margin_mode or "hedging" }}</span>
+          {% else %}-{% endif %}
+        </td>
+        <td>{{ a.ram_mb if a.ram_mb is not none else "-" }}{% if a.ram_mb is not none %} MB{% endif %}</td>
+        <td class="muted">{{ a.last_sync_at.strftime("%Y-%m-%d %H:%M:%S") if a.last_sync_at else "-" }}</td>
+        <td style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+          <form method="post" action="/accounts/{{ a.id }}/connect" style="margin:0;">
+            <input type="hidden" name="csrf" value="{{ session.csrf }}">
+            <button type="submit">Connect</button>
+          </form>
+          {% if a.role == 'slave' %}
+            <a class="btn secondary" href="/slaves?slave_id={{ a.id }}">Rules</a>
+          {% endif %}
+          <form method="post" action="/accounts/{{ a.id }}/delete" style="margin:0;" onsubmit="return confirm('Delete account #{{ a.id }}?');">
+            <input type="hidden" name="csrf" value="{{ session.csrf }}">
+            <button type="submit" class="danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" class="muted">No accounts added yet. Use the form below to pick a broker & server (or click one of your detected MT5 accounts).</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h3>Add Account (Auto-Complete Brokers, Servers & Detected Logins)</h3>
+  <p class="muted" style="margin-top:-0.25rem;margin-bottom:0.85rem;">
+    Start typing or pick from the dropdowns—just like in MT5. If you select a login already used in your MT5 terminals, its exact server and broker fill in automatically.
+  </p>
+
+  {% if catalog and catalog.login_to_server %}
+  <div style="margin-bottom:1rem;">
+    <span class="muted" style="display:block;margin-bottom:0.35rem;">Quick-Fill from Accounts Found on This PC:</span>
+    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+      {% for lg, pair in catalog.login_to_server.items() %}
+        <button type="button" class="secondary" style="font-size:0.78rem;padding:0.28rem 0.6rem;"
+                onclick="quickFillAccount('{{ lg }}', '{{ pair[0] }}')">
+          {{ lg }} · {{ pair[0] }}
+        </button>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <form method="post" action="/accounts/add" class="grid-form">
+    <input type="hidden" name="csrf" value="{{ session.csrf }}">
+    <div class="field">
+      <label>Role</label>
+      <select name="role">
+        <option value="master">Master</option>
+        <option value="slave" selected>Slave</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Login (Account #)</label>
+      <input id="input-login" name="login" type="number" list="login-list" placeholder="e.g. 85516228" required oninput="onLoginInput(this.value)">
+      <datalist id="login-list">
+        {% if catalog %}
+          {% for lg, pair in catalog.login_to_server.items() %}
+            <option value="{{ lg }}">{{ pair[0] }}</option>
+          {% endfor %}
+        {% endif %}
+      </datalist>
+    </div>
+    <div class="field">
+      <label>Broker</label>
+      <input id="input-broker" name="broker" list="broker-list" placeholder="Search or pick broker..." required oninput="onBrokerInput(this.value)">
+      <datalist id="broker-list">
+        {% for t in templates %}<option value="{{ t.broker }}">Installed Template ({{ t.source_dir }})</option>{% endfor %}
+        {% if catalog %}
+          {% for b in catalog.brokers %}<option value="{{ b }}">{% endfor %}
+        {% endif %}
+      </datalist>
+    </div>
+    <div class="field">
+      <label>Trade Server (MT5 Server List)</label>
+      <input id="input-server" name="server" list="server-list" placeholder="Search or pick server..." required oninput="onServerInput(this.value)">
+      <datalist id="server-list">
+        {% if catalog %}
+          {% for s in catalog.local_servers %}<option value="{{ s }}">★ Discovered on this PC</option>{% endfor %}
+          {% for s in catalog.all_servers %}
+            {% if s not in catalog.local_servers %}<option value="{{ s }}">{% endif %}
+          {% endfor %}
+        {% endif %}
+      </datalist>
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input id="input-password" name="password" type="password" required autocomplete="new-password">
+    </div>
+    <div>
+      <button type="submit">Add Account</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h3>Broker Terminal Templates (Auto-Discovered on This PC)</h3>
+  <p class="muted">We automatically detected your installed MetaTrader 5 folders and copied the full <code>servers.dat</code> directory so any broker server resolves automatically.</p>
+  <form method="post" action="/templates/add" class="grid-form" style="margin-bottom:1rem;">
+    <input type="hidden" name="csrf" value="{{ session.csrf }}">
+    <div class="field">
+      <label>Template / Broker Name</label>
+      <input name="broker" placeholder="e.g. Exness" required>
+    </div>
+    <div class="field" style="grid-column: span 2;">
+      <label>Installed MT5 Folder Path</label>
+      <input name="source_dir" list="discovered-dirs" placeholder="C:\Program Files\MetaTrader 5" required>
+      <datalist id="discovered-dirs">
+        {% if catalog %}
+          {% for dt in catalog.terminals %}
+            <option value="{{ dt.install_dir }}">{{ dt.label }} ({{ dt.servers|length }} local servers)</option>
+          {% endfor %}
+        {% endif %}
+      </datalist>
+    </div>
+    <div>
+      <button type="submit" class="secondary">Save Template</button>
+    </div>
+  </form>
+  <table>
+    <thead><tr><th>ID</th><th>Template Name</th><th>Source MT5 Folder</th></tr></thead>
+    <tbody>
+      {% for t in templates %}
+      <tr><td>#{{ t.id }}</td><td><strong>{{ t.broker }}</strong></td><td><code>{{ t.source_dir }}</code></td></tr>
+      {% else %}
+      <tr><td colspan="3" class="muted">No templates registered yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<script>
+  const LOGIN_MAP = {{ (catalog.login_to_server if catalog else {}) | tojson }};
+  const LOCAL_SERVERS = {{ (catalog.local_servers if catalog else []) | tojson }};
+  const ALL_SERVERS = {{ (catalog.all_servers if catalog else []) | tojson }};
+
+  function inferBrokerFromServer(srv) {
+    if (!srv) return "";
+    return srv.split(/[- ]/)[0].trim();
+  }
+
+  function quickFillAccount(login, server) {
+    document.getElementById("input-login").value = login;
+    document.getElementById("input-server").value = server;
+    const brokerInput = document.getElementById("input-broker");
+    if (!brokerInput.value) {
+      brokerInput.value = inferBrokerFromServer(server);
+    }
+    document.getElementById("input-password").focus();
+  }
+
+  function onLoginInput(val) {
+    const clean = (val || "").trim();
+    if (LOGIN_MAP[clean]) {
+      const srv = LOGIN_MAP[clean][0];
+      document.getElementById("input-server").value = srv;
+      const brokerInput = document.getElementById("input-broker");
+      if (!brokerInput.value) {
+        brokerInput.value = inferBrokerFromServer(srv);
+      }
+    }
+  }
+
+  function onServerInput(val) {
+    const brokerInput = document.getElementById("input-broker");
+    if (!brokerInput.value && val && val.includes("-")) {
+      brokerInput.value = inferBrokerFromServer(val);
+    }
+  }
+
+  function onBrokerInput(brokerVal) {
+    const q = (brokerVal || "").trim().toLowerCase();
+    const dl = document.getElementById("server-list");
+    if (!dl) return;
+    const matches = ALL_SERVERS.filter(s => !q || s.toLowerCase().includes(q));
+    const listToShow = matches.length ? matches : ALL_SERVERS;
+    dl.innerHTML = listToShow.map(s => {
+      const isLocal = LOCAL_SERVERS.includes(s);
+      return `<option value="${s}">${isLocal ? "★ Discovered on this PC" : ""}</option>`;
+    }).join("");
+  }
+</script>
+{% endblock %}

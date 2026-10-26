@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block title %}Slave Settings · MT5 Trade Copier{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Per-Slave Rules (Hot-Reloaded Without Restart)</h2>
+  {% if not slaves %}
+    <p class="muted">No slave accounts configured yet. Add a slave account on the <a href="/accounts" style="color:var(--accent)">Accounts</a> page first.</p>
+  {% else %}
+    <div style="margin-bottom:1rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
+      {% for s in slaves %}
+        <a class="btn {% if selected and selected.id == s.id %}{% else %}secondary{% endif %}" href="/slaves?slave_id={{ s.id }}">
+          Slave #{{ s.id }} ({{ s.login }} · {{ s.broker }})
+        </a>
+      {% endfor %}
+    </div>
+
+    {% if selected and cfg %}
+    <form method="post" action="/slaves/{{ selected.id }}/settings">
+      <input type="hidden" name="csrf" value="{{ session.csrf }}">
+      <div class="grid-form" style="margin-bottom:1rem;">
+        <div class="field">
+          <label>Pause Slave Copying</label>
+          <select name="paused">
+            <option value="0" {% if not cfg.paused %}selected{% endif %}>Active (Copying)</option>
+            <option value="1" {% if cfg.paused %}selected{% endif %}>Paused</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Direction</label>
+          <select name="reverse">
+            <option value="0" {% if not cfg.reverse %}selected{% endif %}>Normal (Same as Master)</option>
+            <option value="1" {% if cfg.reverse %}selected{% endif %}>Reverse (BUY ↔ SELL, swap SL/TP)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Default Lot Mode</label>
+          <select name="lot_mode">
+            <option value="multiplier" {% if cfg.lot_mode == 'multiplier' %}selected{% endif %}>Multiplier</option>
+            <option value="fixed" {% if cfg.lot_mode == 'fixed' %}selected{% endif %}>Fixed Lot</option>
+            <option value="balance_pct" {% if cfg.lot_mode == 'balance_pct' %}selected{% endif %}>% of Balance (Proportional)</option>
+            <option value="risk_pct" {% if cfg.lot_mode == 'risk_pct' %}selected{% endif %}>Risk % of Balance</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Lot Value / Multiplier / %</label>
+          <input name="lot_value" type="number" step="0.01" value="{{ cfg.lot_value }}" required>
+        </div>
+        <div class="field">
+          <label>Min Lot (optional)</label>
+          <input name="min_lot" type="number" step="0.01" value="{{ cfg.min_lot if cfg.min_lot is not none else '' }}">
+        </div>
+        <div class="field">
+          <label>Max Lot (optional)</label>
+          <input name="max_lot" type="number" step="0.01" value="{{ cfg.max_lot if cfg.max_lot is not none else '' }}">
+        </div>
+        <div class="field">
+          <label>Max Open Trades</label>
+          <input name="max_open_trades" type="number" value="{{ cfg.max_open_trades if cfg.max_open_trades is not none else '' }}">
+        </div>
+        <div class="field">
+          <label>Slippage / Deviation (pts)</label>
+          <input name="deviation_points" type="number" value="{{ cfg.deviation_points }}">
+        </div>
+        <div class="field">
+          <label>Symbol Filter Mode</label>
+          <select name="symbol_filter_mode">
+            <option value="none" {% if cfg.symbol_filter_mode == 'none' %}selected{% endif %}>None (Allow All)</option>
+            <option value="whitelist" {% if cfg.symbol_filter_mode == 'whitelist' %}selected{% endif %}>Whitelist Only</option>
+            <option value="blacklist" {% if cfg.symbol_filter_mode == 'blacklist' %}selected{% endif %}>Blacklist</option>
+          </select>
+        </div>
+        <div class="field" style="grid-column: span 2;">
+          <label>Filter Symbols (comma-separated, e.g. XAUUSD, EURUSD)</label>
+          <input name="symbol_filter" value="{{ ', '.join(cfg.symbol_filter) }}">
+        </div>
+        <div class="field">
+          <label>Close Orphaned Trades After Master Disconnect</label>
+          <select name="close_orphans">
+            <option value="0" {% if not cfg.close_orphans %}selected{% endif %}>Off (Flag Only - Default)</option>
+            <option value="1" {% if cfg.close_orphans %}selected{% endif %}>On (Auto-Close Orphans)</option>
+          </select>
+        </div>
+      </div>
+      <button type="submit">Save Slave Settings (v{{ cfg.config_version }})</button>
+    </form>
+    {% endif %}
+  {% endif %}
+</div>
+
+{% if selected and cfg %}
+<div class="card">
+  <h3>Per-Symbol Rules & Allowed Lot Sizes (Slave #{{ selected.id }})</h3>
+  <p class="muted">Configure symbol-specific lot overrides and an explicit <strong>Allowed Lot Sizes</strong> list (e.g. <code>0.01, 0.05, 0.10</code>). When a computed lot isn't in the list, it will either snap to the nearest allowed lot or skip the trade.</p>
+  <form method="post" action="/slaves/{{ selected.id }}/symbol-rule" class="grid-form" style="margin-bottom:1rem;">
+    <input type="hidden" name="csrf" value="{{ session.csrf }}">
+    <div class="field">
+      <label>Master Symbol</label>
+      <input name="master_symbol" placeholder="e.g. XAUUSD" required>
+    </div>
+    <div class="field">
+      <label>Enabled</label>
+      <select name="enabled">
+        <option value="1" selected>Enabled</option>
+        <option value="0">Disabled</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Lot Mode Override</label>
+      <select name="lot_mode">
+        <option value="">Inherit Slave Default</option>
+        <option value="fixed">Fixed Lot</option>
+        <option value="multiplier">Multiplier</option>
+        <option value="balance_pct">% of Balance</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Lot Value Override</label>
+      <input name="lot_value" type="number" step="0.01" placeholder="Inherit">
+    </div>
+    <div class="field" style="grid-column: span 2;">
+      <label>Allowed Lot Sizes (comma-separated)</label>
+      <input name="allowed_lots" placeholder="e.g. 0.01, 0.05, 0.10">
+    </div>
+    <div class="field">
+      <label>If Not in Allowed List</label>
+      <select name="not_allowed_action">
+        <option value="snap" selected>Snap to Nearest Allowed</option>
+        <option value="skip">Skip Trade</option>
+      </select>
+    </div>
+    <div>
+      <button type="submit">Save Symbol Rule</button>
+    </div>
+  </form>
+
+  <table>
+    <thead>
+      <tr><th>Master Symbol</th><th>Enabled</th><th>Lot Mode</th><th>Lot Value</th><th>Allowed Lot Sizes</th><th>Not-Allowed Action</th></tr>
+    </thead>
+    <tbody>
+      {% for sym, r in cfg.symbol_rules.items() %}
+      <tr>
+        <td><code>{{ sym }}</code></td>
+        <td>{{ "Yes" if r.enabled else "Disabled" }}</td>
+        <td>{{ r.lot_mode or "Inherit" }}</td>
+        <td>{{ r.lot_value if r.lot_value is not none else "Inherit" }}</td>
+        <td><code>{{ ", ".join(r.allowed_lots|map('string')) if r.allowed_lots else "Any broker-valid lot" }}</code></td>
+        <td>{{ r.not_allowed_action }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="muted">No per-symbol overrides configured.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h3>Symbol Mapping (e.g. XAUUSD → GOLD, EURUSD → EURUSD.m)</h3>
+  <form method="post" action="/slaves/{{ selected.id }}/symbol-map" class="grid-form" style="margin-bottom:1rem;">
+    <input type="hidden" name="csrf" value="{{ session.csrf }}">
+    <div class="field">
+      <label>Master Symbol</label>
+      <input name="master_symbol" placeholder="XAUUSD" required>
+    </div>
+    <div class="field">
+      <label>Slave Broker Symbol</label>
+      <input name="slave_symbol" placeholder="GOLD" required>
+    </div>
+    <div>
+      <button type="submit" class="secondary">Save Mapping</button>
+    </div>
+  </form>
+  <table>
+    <thead><tr><th>Master Symbol</th><th>Slave Broker Symbol</th></tr></thead>
+    <tbody>
+      {% for m_sym, s_sym in cfg.symbol_map.items() %}
+      <tr><td><code>{{ m_sym }}</code></td><td><code>{{ s_sym }}</code></td></tr>
+      {% else %}
+      <tr><td colspan="2" class="muted">No explicit mappings set (suffixes like <code>.m</code>, <code>.pro</code> and aliases like <code>XAUUSD↔GOLD</code> are auto-detected).</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

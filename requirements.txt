@@ -1,0 +1,18 @@
+# Web Dashboard / Serverless Runtime Dependencies
+SQLAlchemy>=2.0
+cryptography>=42.0
+fastapi>=0.110
+uvicorn[standard]>=0.29
+jinja2>=3.1
+python-multipart>=0.0.9
+itsdangerous>=2.1
+httpx>=0.27
+
+# Windows MT5 Worker Dependencies (installed automatically on Windows only)
+MetaTrader5>=5.0.45; sys_platform == "win32"
+psutil>=5.9; sys_platform == "win32"
+pyzmq>=25.1; sys_platform == "win32"
+argon2-cffi>=23.1; sys_platform == "win32"
+
+# Dev / Tests
+pytest>=8.0
