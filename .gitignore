@@ -12,3 +12,6 @@ __pycache__/
 /secrets/
 *.key
 *.dpapi
+
+.vercel
+.env*
