@@ -163,6 +163,13 @@ class MT5Adapter(BrokerAdapter):
             ti = mt5.terminal_info()
             return bool(ti and ti.connected)
 
+    def terminal_alive(self) -> bool:
+        """IPC to our terminal works (terminal_info answers) even if broker link is down."""
+        if mt5 is None or self._connected_login is None:
+            return False
+        with self._lock:
+            return mt5.terminal_info() is not None
+
     def account_info(self) -> AccountInfo:
         with self._lock:
             return self._account_info_locked()

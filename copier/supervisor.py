@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import socket
 import subprocess
 import sys
@@ -184,6 +185,7 @@ class Supervisor:
             self._stop_child(child)
 
     async def run(self) -> None:
+        os.environ["TC_BUS_PORT"] = str(self.bus_port)
         await self.hub.start()
         self.children["web"] = SupervisedChild(
             name="web",

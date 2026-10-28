@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import socket
 import subprocess
 import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 from urllib.parse import quote_plus
@@ -23,7 +26,7 @@ from ..alerts.telegram import (
     set_heartbeat_url,
     set_telegram_config,
 )
-from ..bus import Publisher
+from ..bus import DEFAULT_EVENT_PORT, Publisher
 from ..db import AppSetting, EventLog, TicketMap, TradeAudit, init_db, session_scope
 from ..engine.rules import (
     load_slave_config,
@@ -60,29 +63,84 @@ def set_connect_runner_for_tests(fn: Callable[[int], accounts.ConnectResult] | N
     _connect_runner = fn
 
 
+def _as_utc(dt):
+    if dt is None:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def _cached_connect_result(acc) -> accounts.ConnectResult:
+    from ..adapters.base import AccountInfo, MarginMode
+    info = AccountInfo(
+        login=int(acc.login),
+        name=acc.account_name or "",
+        server=acc.server,
+        company=acc.broker,
+        currency=acc.currency or "USD",
+        balance=float(acc.balance or 0.0),
+        equity=float(acc.equity if acc.equity is not None else (acc.balance or 0.0)),
+        margin_free=float(acc.equity if acc.equity is not None else (acc.balance or 0.0)),
+        leverage=int(acc.leverage or 100),
+        margin_mode=MarginMode(acc.margin_mode or "hedging"),
+        trade_allowed=True,
+        algo_allowed=True,
+    )
+    return accounts.ConnectResult(True, accounts.format_success(info), info=info)
+
+
+def _supervisor_running(port: int = DEFAULT_EVENT_PORT) -> bool:
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.3) as sock:
+            sock.sendall(b'{"topic":"ping","payload":{}}\n')
+            return True
+    except OSError:
+        return False
+
+
+def _connect_via_worker(account_id: int, timeout_s: float = 75.0) -> accounts.ConnectResult:
+    """Ask the account's running worker to retry now and wait for the real outcome.
+
+    Spawning a second process against the same terminal makes both fight over the
+    MT5 IPC pipe (``IPC send failed`` / endless reconnect backoff), so when the
+    supervisor is running the worker is the only one allowed to touch the terminal.
+    """
+    from ..worker import attempt_key
+    t0 = time.time()
+    _bus_pub.publish_sync("control", {"cmd": "reconnect_now", "account_id": account_id})
+    deadline = t0 + timeout_s
+    while time.time() < deadline:
+        time.sleep(0.5)
+        acc = accounts.get_account(account_id)
+        synced = _as_utc(acc.last_sync_at)
+        if acc.status == "connected" and synced and synced.timestamp() >= t0:
+            return _cached_connect_result(acc)
+        with session_scope() as s:
+            row = s.get(AppSetting, attempt_key(account_id))
+            raw = row.value if row else None
+        if raw:
+            try:
+                rec = json.loads(raw)
+            except ValueError:
+                rec = {}
+            if float(rec.get("ts", 0)) >= t0 and not rec.get("ok"):
+                return accounts.ConnectResult(False, str(rec.get("error") or "connect failed"))
+    acc = accounts.get_account(account_id)
+    return accounts.ConnectResult(
+        False, f"No answer from the account worker within {timeout_s:.0f}s. Last status: "
+               f"{acc.status} - {acc.last_error or 'n/a'}")
+
+
 def _run_connect(account_id: int) -> accounts.ConnectResult:
     if _connect_runner is not None:
         return _connect_runner(account_id)
-    # If the background worker already connected this account within the last 15 seconds,
-    # return its live status immediately instead of fighting the running worker for the terminal!
     acc = accounts.get_account(account_id)
-    if acc.status == "connected" and acc.account_name and acc.balance is not None:
-        from ..adapters.base import AccountInfo, MarginMode
-        info = AccountInfo(
-            login=int(acc.login),
-            name=acc.account_name,
-            server=acc.server,
-            company=acc.broker,
-            currency=acc.currency or "USD",
-            balance=float(acc.balance),
-            equity=float(acc.equity if acc.equity is not None else acc.balance),
-            margin_free=float(acc.equity if acc.equity is not None else acc.balance),
-            leverage=int(acc.leverage or 100),
-            margin_mode=MarginMode(acc.margin_mode or "hedging"),
-            trade_allowed=True,
-            algo_allowed=True,
-        )
-        return accounts.ConnectResult(True, accounts.format_success(info), info=info)
+    synced = _as_utc(acc.last_sync_at)
+    fresh = synced is not None and (datetime.now(timezone.utc) - synced).total_seconds() < 15
+    # Worker is live and already connected: report its status instead of touching the terminal.
+    if acc.status == "connected" and acc.account_name and acc.balance is not None and fresh:
+        return _cached_connect_result(acc)
+    if acc.enabled and _supervisor_running():
+        return _connect_via_worker(account_id)
     try:
         proc = subprocess.run(
             [sys.executable, "-m", "copier.worker", "--account-id", str(account_id), "--connect-only"],
@@ -294,7 +352,14 @@ def account_connect_submit(request: Request, account_id: int, csrf: str = Form(.
 @app.post("/accounts/{account_id}/delete")
 def account_delete_submit(request: Request, account_id: int, csrf: str = Form(...)):
     verify_csrf(request, csrf)
+    try:
+        acc = accounts.get_account(account_id)
+        label = f"{acc.role} account #{account_id} ({acc.login}@{acc.server})"
+    except accounts.ValidationError:
+        return _redirect("/accounts", err=f"Account #{account_id} not found.")
     accounts.delete_account(account_id)
+    ip = request.client.host if request.client else "?"
+    record_event_log(f"Deleted {label} from {ip}", source="web", level="warn")
     return _redirect("/accounts", ok=f"Account #{account_id} deleted.")
 
 

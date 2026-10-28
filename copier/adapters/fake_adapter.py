@@ -35,6 +35,8 @@ class FakeAdapter(BrokerAdapter):
         self._deals: list[Deal] = []
         self._ids = itertools.count(100_001)
         self._connected = False
+        self.link_down = False
+        self.connect_calls = 0
         self.fail_queue: list[ExecCode] = []
         self.sent: list[tuple[str, object]] = []  # request log for assertions
 
@@ -68,13 +70,23 @@ class FakeAdapter(BrokerAdapter):
             raise ConnectError("Authorization failed", code=-6,
                                hint="Wrong login/password, wrong server name, or account disabled")
         self._connected = True
+        self.link_down = False
+        self.connect_calls += 1
         return self.account_info()
 
     def disconnect(self) -> None:
         self._connected = False
+        self.link_down = False
 
     def is_connected(self) -> bool:
+        return self._connected and not self.link_down
+
+    def terminal_alive(self) -> bool:
         return self._connected
+
+    def simulate_broker_link_drop(self, down: bool = True) -> None:
+        """Terminal still running, but its connection to the trade server is lost."""
+        self.link_down = down
 
     def account_info(self) -> AccountInfo:
         return AccountInfo(login=self.login, name="Fake Trader", server=self.server, company="FakeBroker",

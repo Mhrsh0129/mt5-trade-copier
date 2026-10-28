@@ -18,13 +18,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import socket
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
 
 log = logging.getLogger(__name__)
 
-DEFAULT_EVENT_PORT = 5555
+DEFAULT_EVENT_PORT = int(os.environ.get("TC_BUS_PORT", "5555"))
 DEFAULT_CONTROL_PORT = 5556
 BUS_HOST = "127.0.0.1"
 

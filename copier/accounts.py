@@ -10,9 +10,9 @@ from sqlalchemy import func, select
 
 from . import crypto
 from .adapters import AccountInfo, BrokerAdapter, ConnectError, Credentials, MarginMode, get_adapter
-from .db import Account, SlaveSettings, TerminalTemplate, session_scope
+from .db import Account, AppSetting, SlaveSettings, TerminalTemplate, session_scope
 from .db.models import utcnow
-from .terminals.provision import TERMINAL_EXE, provision_terminal, validate_template
+from .terminals.provision import TERMINAL_EXE, account_terminal_dir, provision_terminal, validate_template
 
 log = logging.getLogger(__name__)
 
@@ -98,7 +98,11 @@ def add_account(*, role: str, broker: str, server: str, login: int, password: st
         acc_id, src = acc.id, tmpl.source_dir
 
     if provision:
-        dest = provision_terminal(acc_id, src)
+        # A leftover folder for this id belongs to a previously deleted account: start clean.
+        stale = account_terminal_dir(acc_id).exists()
+        if stale:
+            log.info("Re-provisioning leftover terminal folder for reused account id %s", acc_id)
+        dest = provision_terminal(acc_id, src, force=stale)
         with session_scope() as s:
             s.get(Account, acc_id).terminal_dir = str(dest)
     log.info("Added %s account id=%s login=%s server=%s", role, acc_id, login, server)
@@ -126,11 +130,50 @@ def update_password(account_id: int, password: str) -> None:
         acc.password_enc = crypto.encrypt(password)
 
 
-def delete_account(account_id: int) -> None:
+def delete_account(account_id: int, *, remove_terminal: bool = True) -> None:
+    """Delete the account and (by default) stop + remove its portable terminal folder.
+
+    SQLite reuses ids after deletion, so leaving ``acc_<id>`` behind would make the
+    next account with the same id inherit the old login's terminal state (and a
+    still-running terminal64.exe logged into the deleted account).
+    """
+    terminal_dir: str | None = None
     with session_scope() as s:
         acc = s.get(Account, account_id)
         if acc is not None:
+            terminal_dir = acc.terminal_dir
             s.delete(acc)
+        s.query(AppSetting).filter(AppSetting.key == f"connect_attempt:{account_id}").delete()
+    if remove_terminal and terminal_dir:
+        _remove_terminal_dir(Path(terminal_dir))
+
+
+def _remove_terminal_dir(path: Path) -> None:
+    import shutil
+
+    from .config import get_paths
+    from .terminals.provision import kill_terminal_processes
+    root = get_paths().terminals_dir.resolve()
+    try:
+        target = path.resolve()
+    except OSError:
+        return
+    if root not in target.parents or not target.exists():
+        log.warning("Not removing terminal dir outside %s: %s", root, target)
+        return
+    try:
+        kill_terminal_processes(target)
+    except Exception:  # noqa: BLE001
+        log.exception("Could not stop terminal in %s", target)
+    for _ in range(5):
+        try:
+            shutil.rmtree(target)
+            log.info("Removed terminal folder %s", target)
+            return
+        except OSError:
+            import time
+            time.sleep(1.0)
+    log.warning("Could not remove terminal folder %s (files in use?)", target)
 
 
 def credentials_for(acc: Account) -> Credentials:

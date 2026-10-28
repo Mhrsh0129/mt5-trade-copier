@@ -26,7 +26,7 @@ from .adapters import get_adapter
 from .alerts.outbox import enqueue_alert, record_event_log
 from .bus import DEFAULT_EVENT_PORT, Publisher, Subscriber
 from .config import MASTER_POLL_MS
-from .db import Account, init_db, session_scope
+from .db import Account, AppSetting, init_db, session_scope
 from .db.models import utcnow
 from .engine.executor import SlaveExecutor
 from .engine.master import MasterPoller, load_master_snapshot_db
@@ -44,17 +44,50 @@ def _update_account_status(account_id: int, **fields) -> None:
                 setattr(acc, k, v)
 
 
-async def run_master_worker(account_id: int, event_port: int = DEFAULT_EVENT_PORT) -> None:
-    log = account_logger(account_id)
-    acc = accounts.get_account(account_id)
-    adapter = get_adapter("mt5")
-    watchdog = TerminalWatchdog(
+def attempt_key(account_id: int) -> str:
+    return f"connect_attempt:{account_id}"
+
+
+def _attempt_recorder(account_id: int):
+    """Persist the outcome of every real connect attempt so the dashboard can await it."""
+    def _cb(ok: bool, err: str | None) -> None:
+        with session_scope() as s:
+            s.merge(AppSetting(key=attempt_key(account_id),
+                               value=json.dumps({"ts": time.time(), "ok": ok, "error": err})))
+    return _cb
+
+
+def _is_reconnect_cmd(msg, account_id: int) -> bool:
+    p = msg.payload or {}
+    return msg.topic == "control" and p.get("cmd") == "reconnect_now" and \
+        int(p.get("account_id", -1)) == account_id
+
+
+def _make_watchdog(account_id: int, adapter, acc) -> TerminalWatchdog:
+    return TerminalWatchdog(
         account_id,
         adapter,
         lambda: accounts.credentials_for(accounts.get_account(account_id)),
         Path(acc.terminal_dir) if acc.terminal_dir else None,
+        on_attempt=_attempt_recorder(account_id),
     )
+
+
+async def run_master_worker(account_id: int, event_port: int = DEFAULT_EVENT_PORT) -> None:
+    log = account_logger(account_id)
+    acc = accounts.get_account(account_id)
+    adapter = get_adapter("mt5")
+    watchdog = _make_watchdog(account_id, adapter, acc)
     pub = Publisher(port=event_port)
+    ctl_sub = Subscriber(topics={"control"}, port=event_port)
+
+    async def _ctl_loop() -> None:
+        async for msg in ctl_sub.listen():
+            if _is_reconnect_cmd(msg, account_id):
+                log.info("Reconnect requested from dashboard")
+                watchdog.request_reconnect()
+
+    ctl_task = asyncio.create_task(_ctl_loop())
     poller = MasterPoller(adapter, pub, poll_ms=MASTER_POLL_MS)
     seeded = False
     was_connected = False
@@ -115,12 +148,7 @@ async def run_slave_worker(account_id: int, event_port: int = DEFAULT_EVENT_PORT
     log = account_logger(account_id)
     acc = accounts.get_account(account_id)
     adapter = get_adapter("mt5")
-    watchdog = TerminalWatchdog(
-        account_id,
-        adapter,
-        lambda: accounts.credentials_for(accounts.get_account(account_id)),
-        Path(acc.terminal_dir) if acc.terminal_dir else None,
-    )
+    watchdog = _make_watchdog(account_id, adapter, acc)
     executor = SlaveExecutor(
         account_id,
         adapter,
@@ -134,6 +162,10 @@ async def run_slave_worker(account_id: int, event_port: int = DEFAULT_EVENT_PORT
 
     async def _bus_loop() -> None:
         async for msg in bus_sub.listen():
+            if _is_reconnect_cmd(msg, account_id):
+                log.info("Reconnect requested from dashboard")
+                watchdog.request_reconnect()
+                continue
             if not adapter.is_connected() and msg.topic != "control":
                 continue
             try:

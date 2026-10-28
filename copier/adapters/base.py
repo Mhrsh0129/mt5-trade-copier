@@ -228,6 +228,13 @@ class BrokerAdapter(ABC):
     def disconnect(self) -> None: ...
     @abstractmethod
     def is_connected(self) -> bool: ...
+    def terminal_alive(self) -> bool:
+        """True if the terminal process/IPC is alive even when its broker link is down.
+
+        Lets the watchdog wait for the terminal's own auto-reconnect instead of
+        re-initialising a healthy terminal. Default: unknown -> False.
+        """
+        return False
     @abstractmethod
     def account_info(self) -> AccountInfo: ...
 
