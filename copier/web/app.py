@@ -34,7 +34,7 @@ from ..engine.rules import (
     upsert_symbol_map,
     upsert_symbol_rule,
 )
-from ..terminals.discovery import CURATED_BROKER_SERVERS, discover_mt5_environment
+from ..terminals.discovery import BROKER_COMPANIES, CURATED_BROKER_SERVERS, discover_mt5_environment
 from ..terminals.provision import terminal_memory_mb
 from .auth import (
     SESSION_COOKIE,
@@ -288,6 +288,7 @@ def accounts_page(request: Request):
             templates=tmpls,
             catalog=catalog,
             curated_broker_servers=CURATED_BROKER_SERVERS,
+            broker_companies=BROKER_COMPANIES,
         ),
     )
 

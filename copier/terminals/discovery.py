@@ -26,13 +26,15 @@ _SKIP_BASE_DIRS = {"chats", "custom", "default", "signals", "subscriptions", "te
 _AUTH_LOG_RE = re.compile(r"'(\d+)':\s+authorized on\s+([^\r\n\t(]+?)(?:\s+through\s+|\s*\(|\r|\n|$)")
 
 # Curated catalog of popular MT5 broker servers so users get autocomplete even for new servers
+_EXNESS_SERVERS: list[str] = [
+    "Exness-MT5Real",
+    *[f"Exness-MT5Real{i}" for i in range(2, 55)],
+    "Exness-MT5Trial",
+    *[f"Exness-MT5Trial{i}" for i in range(2, 25)],
+]
+
 CURATED_BROKER_SERVERS: dict[str, list[str]] = {
-    "Exness": [
-        "Exness-MT5Real",
-        *[f"Exness-MT5Real{i}" for i in range(1, 55)],
-        "Exness-MT5Trial",
-        *[f"Exness-MT5Trial{i}" for i in range(1, 25)],
-    ],
+    "Exness": _EXNESS_SERVERS,
     "XMGlobal": [
         "XMGlobal-MT5",
         *[f"XMGlobal-MT5 {i}" for i in range(2, 16)],
@@ -44,6 +46,8 @@ CURATED_BROKER_SERVERS: dict[str, list[str]] = {
         "ICMarketsEU-Demo",
         "ICMarketsEU-MT5-1",
         "ICMarketsGlobal-Demo",
+        "ICMarketsInternational-Demo",
+        "ICMarketsInternational-MT5-1",
     ],
     "Vantage": [
         "VantageInternational-Demo",
@@ -76,6 +80,7 @@ CURATED_BROKER_SERVERS: dict[str, list[str]] = {
         "FTMO-Server2",
         "FTMO-Server3",
         "FTMO-Server4",
+        "FTMO-Server5",
     ],
     "Tickmill": [
         "Tickmill-Demo",
@@ -92,11 +97,291 @@ CURATED_BROKER_SERVERS: dict[str, list[str]] = {
     "Eightcap": [
         "Eightcap-Demo",
         "Eightcap-Real",
+        "EightcapGlobal-Demo",
+        "EightcapGlobal-Real",
+    ],
+    "HFM": [
+        "HFMarketsSV-DemoServer",
+        "HFMarketsSV-LiveServer",
+        "HFMarketsSV-LiveServer2",
+        "HFMarketsSV-LiveServer3",
+        "HFMarketsGlobal-Demo",
+        "HFMarketsGlobal-Live1",
+    ],
+    "RoboForex": [
+        "RoboForex-ECN",
+        "RoboForex-Pro",
+        "RoboForex-Prime",
+    ],
+    "FBS": [
+        "FBS-Real",
+        "FBS-Real-2",
+        "FBS-Demo",
+    ],
+    "OctaFX": [
+        "OctaFX-Real",
+        "OctaFX-Real2",
+        "OctaFX-Real3",
+        "OctaFX-Demo",
+    ],
+    "JustMarkets": [
+        "JustMarkets-Live",
+        "JustMarkets-Live2",
+        "JustMarkets-Live3",
+        "JustMarkets-Demo",
+        "JustMarkets-Demo2",
+    ],
+    "FXTM": [
+        "ForexTimeFXTM-MT5",
+        "ForexTimeFXTM-MT5-2",
+        "ForexTimeFXTM-MT5-Demo",
+    ],
+    "FundedNext": [
+        "FundedNext-Server",
+        "FundedNext-Server 2",
+        "FundedNext-Server 3",
+        "FundedNext-Server 4",
+        "FundedNext-Demo",
+    ],
+    "The5ers": [
+        "FivePercentOnline-Real",
+        "FivePercentOnline-Demo",
+    ],
+    "Deriv": [
+        "Deriv-Server",
+        "Deriv-Server-02",
+        "Deriv-Server-03",
+        "Deriv-Demo",
+        "DerivSVG-Server",
+        "DerivSVG-Server-02",
+    ],
+    "OANDA": [
+        "OANDA-v20 Live-1",
+        "OANDA-v20 Practice-1",
+        "OANDATMS-MT5",
+    ],
+    "Admirals": [
+        "AdmiralsGroup-Live",
+        "AdmiralsGroup-Demo",
     ],
     "MetaQuotes": [
         "MetaQuotes-Demo",
     ],
 }
+
+# MT5-style Broker Companies directory (multiple legal entities per broker brand, just like MT5's "Find your company" dialog)
+BROKER_COMPANIES: list[dict[str, object]] = [
+    {
+        "company": "Exness Technologies Ltd",
+        "brand": "Exness",
+        "region": "Global / International",
+        "servers": _EXNESS_SERVERS,
+    },
+    {
+        "company": "Exness (SC) Ltd",
+        "brand": "Exness",
+        "region": "Seychelles (FSA)",
+        "servers": _EXNESS_SERVERS,
+    },
+    {
+        "company": "Exness B.V.",
+        "brand": "Exness",
+        "region": "Curaçao (CBCS)",
+        "servers": _EXNESS_SERVERS,
+    },
+    {
+        "company": "Exness (VG) Ltd",
+        "brand": "Exness",
+        "region": "British Virgin Islands (FSC)",
+        "servers": _EXNESS_SERVERS,
+    },
+    {
+        "company": "Exness (KE) Limited",
+        "brand": "Exness",
+        "region": "Kenya (CMA)",
+        "servers": _EXNESS_SERVERS,
+    },
+    {
+        "company": "Exness (CY) Ltd",
+        "brand": "Exness",
+        "region": "Cyprus / EU (CySEC)",
+        "servers": _EXNESS_SERVERS,
+    },
+    {
+        "company": "MajestyFX Limited",
+        "brand": "MajestyFX",
+        "region": "Global",
+        "servers": CURATED_BROKER_SERVERS["MajestyFX"],
+    },
+    {
+        "company": "Raw Trading Ltd (IC Markets Global)",
+        "brand": "ICMarkets",
+        "region": "Seychelles / Global",
+        "servers": [s for s in CURATED_BROKER_SERVERS["ICMarkets"] if "SC" in s or "Global" in s or "International" in s],
+    },
+    {
+        "company": "International Capital Markets Pty Ltd (IC Markets)",
+        "brand": "ICMarkets",
+        "region": "Australia (ASIC)",
+        "servers": CURATED_BROKER_SERVERS["ICMarkets"],
+    },
+    {
+        "company": "IC Markets (EU) Ltd",
+        "brand": "ICMarkets",
+        "region": "Europe (CySEC)",
+        "servers": [s for s in CURATED_BROKER_SERVERS["ICMarkets"] if "EU" in s],
+    },
+    {
+        "company": "XM Global Limited",
+        "brand": "XMGlobal",
+        "region": "Global / Belize",
+        "servers": CURATED_BROKER_SERVERS["XMGlobal"],
+    },
+    {
+        "company": "Trading Point of Financial Instruments Ltd (XM)",
+        "brand": "XMGlobal",
+        "region": "Europe / International",
+        "servers": CURATED_BROKER_SERVERS["XMGlobal"],
+    },
+    {
+        "company": "Vantage International Group Limited",
+        "brand": "Vantage",
+        "region": "Cayman / Global",
+        "servers": [s for s in CURATED_BROKER_SERVERS["Vantage"] if "International" in s],
+    },
+    {
+        "company": "Vantage Global Prime Pty Ltd",
+        "brand": "Vantage",
+        "region": "Australia / Global",
+        "servers": CURATED_BROKER_SERVERS["Vantage"],
+    },
+    {
+        "company": "FTMO s.r.o.",
+        "brand": "FTMO",
+        "region": "Prop Firm (Global)",
+        "servers": CURATED_BROKER_SERVERS["FTMO"],
+    },
+    {
+        "company": "Pepperstone Group Limited",
+        "brand": "Pepperstone",
+        "region": "Australia / Global",
+        "servers": [s for s in CURATED_BROKER_SERVERS["Pepperstone"] if "UK" not in s],
+    },
+    {
+        "company": "Pepperstone Limited (UK)",
+        "brand": "Pepperstone",
+        "region": "United Kingdom (FCA)",
+        "servers": [s for s in CURATED_BROKER_SERVERS["Pepperstone"] if "UK" in s],
+    },
+    {
+        "company": "EC Markets Group Ltd",
+        "brand": "ECMarkets",
+        "region": "Global",
+        "servers": CURATED_BROKER_SERVERS["ECMarkets"],
+    },
+    {
+        "company": "VPFX Capital Markets Ltd",
+        "brand": "VPFX",
+        "region": "Global",
+        "servers": CURATED_BROKER_SERVERS["VPFX"],
+    },
+    {
+        "company": "Tickmill Ltd",
+        "brand": "Tickmill",
+        "region": "Seychelles / Global",
+        "servers": [s for s in CURATED_BROKER_SERVERS["Tickmill"] if "UK" not in s],
+    },
+    {
+        "company": "Tickmill UK Ltd",
+        "brand": "Tickmill",
+        "region": "United Kingdom (FCA)",
+        "servers": [s for s in CURATED_BROKER_SERVERS["Tickmill"] if "UK" in s],
+    },
+    {
+        "company": "First Prudential Markets Limited (FP Markets)",
+        "brand": "FP Markets",
+        "region": "Global / Australia",
+        "servers": CURATED_BROKER_SERVERS["FP Markets"],
+    },
+    {
+        "company": "Eightcap Pty Ltd",
+        "brand": "Eightcap",
+        "region": "Australia / Global",
+        "servers": CURATED_BROKER_SERVERS["Eightcap"],
+    },
+    {
+        "company": "HF Markets (SV) Ltd (HFM)",
+        "brand": "HFM",
+        "region": "Global",
+        "servers": CURATED_BROKER_SERVERS["HFM"],
+    },
+    {
+        "company": "RoboForex Ltd",
+        "brand": "RoboForex",
+        "region": "Global",
+        "servers": CURATED_BROKER_SERVERS["RoboForex"],
+    },
+    {
+        "company": "FBS Markets Inc",
+        "brand": "FBS",
+        "region": "Global",
+        "servers": CURATED_BROKER_SERVERS["FBS"],
+    },
+    {
+        "company": "Octa Markets Incorporated (OctaFX)",
+        "brand": "OctaFX",
+        "region": "Global",
+        "servers": CURATED_BROKER_SERVERS["OctaFX"],
+    },
+    {
+        "company": "Just Global Markets Ltd (JustMarkets)",
+        "brand": "JustMarkets",
+        "region": "Global",
+        "servers": CURATED_BROKER_SERVERS["JustMarkets"],
+    },
+    {
+        "company": "ForexTime Ltd (FXTM)",
+        "brand": "FXTM",
+        "region": "Global",
+        "servers": CURATED_BROKER_SERVERS["FXTM"],
+    },
+    {
+        "company": "FundedNext",
+        "brand": "FundedNext",
+        "region": "Prop Firm (Global)",
+        "servers": CURATED_BROKER_SERVERS["FundedNext"],
+    },
+    {
+        "company": "Five Percent Online Ltd (The5ers)",
+        "brand": "The5ers",
+        "region": "Prop Firm (Global)",
+        "servers": CURATED_BROKER_SERVERS["The5ers"],
+    },
+    {
+        "company": "Deriv (SVG) LLC / Deriv Ltd",
+        "brand": "Deriv",
+        "region": "Global",
+        "servers": CURATED_BROKER_SERVERS["Deriv"],
+    },
+    {
+        "company": "OANDA Corporation",
+        "brand": "OANDA",
+        "region": "Global / US / EU",
+        "servers": CURATED_BROKER_SERVERS["OANDA"],
+    },
+    {
+        "company": "Admirals Group AS",
+        "brand": "Admirals",
+        "region": "Global / Europe",
+        "servers": CURATED_BROKER_SERVERS["Admirals"],
+    },
+    {
+        "company": "MetaQuotes Ltd",
+        "brand": "MetaQuotes",
+        "region": "Demo Server",
+        "servers": CURATED_BROKER_SERVERS["MetaQuotes"],
+    },
+]
 
 
 @dataclass

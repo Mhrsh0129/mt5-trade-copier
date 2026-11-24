@@ -1,6 +1,81 @@
 {% extends "base.html" %}
 {% block title %}Accounts · MT5 Trade Copier{% endblock %}
 {% block content %}
+<style>
+  .broker-picker-trigger {
+    display: flex; gap: 0.45rem; align-items: center;
+  }
+  .broker-picker-trigger input {
+    flex: 1; cursor: pointer;
+  }
+  .modal-backdrop {
+    position: fixed; inset: 0; background: var(--modal-backdrop);
+    display: none; align-items: center; justify-content: center;
+    z-index: 1000; padding: 1rem; backdrop-filter: blur(3px);
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal-dialog {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; width: 100%; max-width: 820px; max-height: 86vh;
+    display: flex; flex-direction: column; box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .modal-header {
+    padding: 1rem 1.25rem; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  }
+  .modal-header h3 { margin: 0; font-size: 1.08rem; color: var(--accent); }
+  .modal-body {
+    padding: 1rem 1.25rem; overflow-y: auto; display: flex; flex-direction: column; gap: 0.9rem;
+  }
+  .brand-pills {
+    display: flex; gap: 0.4rem; flex-wrap: wrap;
+  }
+  .brand-pill {
+    background: var(--sec-bg); color: var(--sec-fg); border: 1px solid var(--sec-border);
+    border-radius: 999px; padding: 0.25rem 0.7rem; font-size: 0.78rem; font-weight: 700;
+    cursor: pointer;
+  }
+  .brand-pill.active, .brand-pill:hover {
+    background: var(--accent); color: var(--accent-fg); border-color: var(--accent);
+  }
+  .company-list {
+    display: flex; flex-direction: column; gap: 0.6rem;
+  }
+  .company-item {
+    border: 1px solid var(--border); border-radius: 9px; padding: 0.85rem 1rem;
+    background: var(--input-bg); cursor: pointer; transition: all 0.15s ease;
+    display: flex; flex-direction: column; gap: 0.55rem;
+  }
+  .company-item:hover, .company-item.selected {
+    border-color: var(--accent); background: var(--accent-soft);
+  }
+  .company-top {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap;
+  }
+  .company-title {
+    font-weight: 700; font-size: 0.96rem; color: var(--text);
+    display: flex; align-items: center; gap: 0.55rem;
+  }
+  .company-avatar {
+    width: 32px; height: 32px; border-radius: 7px; background: var(--accent);
+    color: var(--accent-fg); font-weight: 800; font-size: 0.85rem;
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .server-chips {
+    display: flex; gap: 0.35rem; flex-wrap: wrap; max-height: 88px; overflow-y: auto;
+    padding-top: 0.2rem;
+  }
+  .server-chip {
+    font-size: 0.76rem; padding: 0.18rem 0.5rem; border-radius: 5px;
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .server-chip:hover {
+    border-color: var(--accent); color: var(--accent);
+  }
+</style>
+
 <div class="card">
   <h2>Accounts (1 Master → up to 10 Slaves)</h2>
   <table>
@@ -29,7 +104,7 @@
             <span class="badge connected">● Connected</span>
           {% elif a.status == 'error' %}
             <span class="badge error">● Error</span>
-            {% if a.last_error %}<div class="muted" style="color:#fca5a5;max-width:300px;">{{ a.last_error }}</div>{% endif %}
+            {% if a.last_error %}<div class="muted" style="color:var(--badge-err-fg);max-width:300px;">{{ a.last_error }}</div>{% endif %}
           {% else %}
             <span class="badge disconnected">○ Disconnected</span>
           {% endif %}
@@ -57,33 +132,28 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="9" class="muted">No accounts added yet. Use the form below to pick a broker & server (or click one of your detected MT5 accounts).</td></tr>
+      <tr><td colspan="9" class="muted">No accounts added yet. Click <strong>Find Broker / Company</strong> below to select your broker company and choose a trade server from the dropdown menu.</td></tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
 
 <div class="card">
-  <h3>Add Account (Auto-Complete Brokers, Servers & Detected Logins)</h3>
-  <p class="muted" style="margin-top:-0.25rem;margin-bottom:0.85rem;">
-    Start typing or pick from the dropdowns—just like in MT5. If you select a login already used in your MT5 terminals, its exact server and broker fill in automatically.
-  </p>
-
-  {% if catalog and catalog.login_to_server %}
-  <div style="margin-bottom:1rem;">
-    <span class="muted" style="display:block;margin-bottom:0.35rem;">Quick-Fill from Accounts Found on This PC:</span>
-    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
-      {% for lg, pair in catalog.login_to_server.items() %}
-        <button type="button" class="secondary" style="font-size:0.78rem;padding:0.28rem 0.6rem;"
-                onclick="quickFillAccount('{{ lg }}', '{{ pair[0] }}')">
-          {{ lg }} · {{ pair[0] }}
-        </button>
-      {% endfor %}
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:0.85rem;">
+    <div>
+      <h3 style="margin-bottom:0.2rem;">Add MT5 Account</h3>
+      <p class="muted" style="margin:0;">
+        1. Click <strong>Find Broker / Company</strong> to search &amp; pick your broker company (e.g. Exness Technologies Ltd, Exness (SC) Ltd, IC Markets, FTMO, MajestyFX) →
+        2. Pick your <strong>Trade Server</strong> from the dropdown menu →
+        3. Enter your <strong>Login</strong> &amp; <strong>Password</strong>.
+      </p>
     </div>
+    <button type="button" class="secondary" onclick="openBrokerModal()">
+      🔍 Find Broker / Company...
+    </button>
   </div>
-  {% endif %}
 
-  <form method="post" action="/accounts/add" class="grid-form">
+  <form method="post" action="/accounts/add" class="grid-form" onsubmit="return beforeAddAccountSubmit()">
     <input type="hidden" name="csrf" value="{{ session.csrf }}">
     <div class="field">
       <label>Role</label>
@@ -92,134 +162,278 @@
         <option value="slave" selected>Slave</option>
       </select>
     </div>
+
+    <div class="field" style="grid-column: span 2;">
+      <label>Broker / Company (Click to Search Like MT5)</label>
+      <div class="broker-picker-trigger">
+        <input id="input-broker-display" type="text" placeholder="Click to search broker company (e.g. Exness)..." readonly onclick="openBrokerModal()" required>
+        <input id="input-broker" name="broker" type="hidden" required>
+        <button type="button" class="secondary" onclick="openBrokerModal()" style="white-space:nowrap;">Find Broker</button>
+      </div>
+    </div>
+
+    <div class="field" style="grid-column: span 2;">
+      <label>Trade Server (Dropdown Menu)</label>
+      <select id="select-server" onchange="onServerDropdownChange(this.value)" required>
+        <option value="" disabled selected>Select broker company first (or click Find Broker)...</option>
+      </select>
+      <input id="input-server" name="server" type="hidden" required>
+      <input id="input-custom-server" type="text" placeholder="Enter custom MT5 server name..." style="display:none;margin-top:0.45rem;" oninput="document.getElementById('input-server').value = this.value.trim()">
+    </div>
+
     <div class="field">
       <label>Login (Account #)</label>
-      <input id="input-login" name="login" type="number" list="login-list" placeholder="e.g. 85516228" required oninput="onLoginInput(this.value)">
-      <datalist id="login-list">
-        {% if catalog %}
-          {% for lg, pair in catalog.login_to_server.items() %}
-            <option value="{{ lg }}">{{ pair[0] }}</option>
-          {% endfor %}
-        {% endif %}
-      </datalist>
+      <input id="input-login" name="login" type="number" placeholder="e.g. 9009095877279" required>
     </div>
-    <div class="field">
-      <label>Broker</label>
-      <input id="input-broker" name="broker" list="broker-list" placeholder="Search or pick broker..." required oninput="onBrokerInput(this.value)">
-      <datalist id="broker-list">
-        {% for t in templates %}<option value="{{ t.broker }}">Installed Template ({{ t.source_dir }})</option>{% endfor %}
-        {% if catalog %}
-          {% for b in catalog.brokers %}<option value="{{ b }}">{% endfor %}
-        {% endif %}
-      </datalist>
-    </div>
-    <div class="field">
-      <label>Trade Server (MT5 Server List)</label>
-      <input id="input-server" name="server" list="server-list" placeholder="Search or pick server..." required oninput="onServerInput(this.value)">
-      <datalist id="server-list">
-        {% if catalog %}
-          {% for s in catalog.local_servers %}<option value="{{ s }}">★ Discovered on this PC</option>{% endfor %}
-          {% for s in catalog.all_servers %}
-            {% if s not in catalog.local_servers %}<option value="{{ s }}">{% endif %}
-          {% endfor %}
-        {% endif %}
-      </datalist>
-    </div>
+
     <div class="field">
       <label>Password</label>
-      <input id="input-password" name="password" type="password" required autocomplete="new-password">
+      <input id="input-password" name="password" type="password" placeholder="MT5 Account Password" required autocomplete="new-password">
     </div>
+
     <div>
-      <button type="submit">Add Account</button>
+      <button type="submit" style="width:100%;">Add Account</button>
     </div>
   </form>
 </div>
 
-<div class="card">
-  <h3>Broker Terminal Templates (Auto-Discovered on This PC)</h3>
-  <p class="muted">We automatically detected your installed MetaTrader 5 folders and copied the full <code>servers.dat</code> directory so any broker server resolves automatically.</p>
-  <form method="post" action="/templates/add" class="grid-form" style="margin-bottom:1rem;">
-    <input type="hidden" name="csrf" value="{{ session.csrf }}">
-    <div class="field">
-      <label>Template / Broker Name</label>
-      <input name="broker" placeholder="e.g. Exness" required>
+<!-- MT5-Style "Find Your Broker / Company" Dialog Box -->
+<div id="broker-modal" class="modal-backdrop" onclick="if(event.target===this) closeBrokerModal()">
+  <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="broker-modal-title">
+    <div class="modal-header">
+      <h3 id="broker-modal-title">Find Your Broker Company (MT5 Server Directory)</h3>
+      <button type="button" class="secondary" onclick="closeBrokerModal()" style="padding:0.3rem 0.65rem;">✕ Close</button>
     </div>
-    <div class="field" style="grid-column: span 2;">
-      <label>Installed MT5 Folder Path</label>
-      <input name="source_dir" list="discovered-dirs" placeholder="C:\Program Files\MetaTrader 5" required>
-      <datalist id="discovered-dirs">
-        {% if catalog %}
-          {% for dt in catalog.terminals %}
-            <option value="{{ dt.install_dir }}">{{ dt.label }} ({{ dt.servers|length }} local servers)</option>
-          {% endfor %}
-        {% endif %}
-      </datalist>
+    <div class="modal-body">
+      <div class="field">
+        <label>Search Company or Server Name (e.g. Exness, IC Markets, XM, MajestyFX, FTMO, Vantage)</label>
+        <input id="modal-broker-search" type="text" placeholder="Type company name (e.g. Exness)..." oninput="renderBrokerCompanies()">
+      </div>
+      <div class="brand-pills" id="brand-pills-bar"></div>
+      <div class="muted" id="company-results-count"></div>
+      <div class="company-list" id="company-list-container"></div>
     </div>
-    <div>
-      <button type="submit" class="secondary">Save Template</button>
-    </div>
-  </form>
-  <table>
-    <thead><tr><th>ID</th><th>Template Name</th><th>Source MT5 Folder</th></tr></thead>
-    <tbody>
-      {% for t in templates %}
-      <tr><td>#{{ t.id }}</td><td><strong>{{ t.broker }}</strong></td><td><code>{{ t.source_dir }}</code></td></tr>
-      {% else %}
-      <tr><td colspan="3" class="muted">No templates registered yet.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  </div>
 </div>
 
 <script>
-  const LOGIN_MAP = {{ (catalog.login_to_server if catalog else {}) | tojson }};
-  const LOCAL_SERVERS = {{ (catalog.local_servers if catalog else []) | tojson }};
+  const BROKER_COMPANIES = {{ (broker_companies if broker_companies is defined else []) | tojson }};
   const ALL_SERVERS = {{ (catalog.all_servers if catalog else []) | tojson }};
+  let activeBrandFilter = "";
 
-  function inferBrokerFromServer(srv) {
-    if (!srv) return "";
-    return srv.split(/[- ]/)[0].trim();
-  }
-
-  function quickFillAccount(login, server) {
-    document.getElementById("input-login").value = login;
-    document.getElementById("input-server").value = server;
-    const brokerInput = document.getElementById("input-broker");
-    if (!brokerInput.value) {
-      brokerInput.value = inferBrokerFromServer(server);
-    }
-    document.getElementById("input-password").focus();
-  }
-
-  function onLoginInput(val) {
-    const clean = (val || "").trim();
-    if (LOGIN_MAP[clean]) {
-      const srv = LOGIN_MAP[clean][0];
-      document.getElementById("input-server").value = srv;
-      const brokerInput = document.getElementById("input-broker");
-      if (!brokerInput.value) {
-        brokerInput.value = inferBrokerFromServer(srv);
+  // Merge any additional discovered servers into matching or standalone company groups
+  (function mergeDiscoveredServers() {
+    const known = new Set();
+    BROKER_COMPANIES.forEach(c => (c.servers || []).forEach(s => known.add(s)));
+    const extrasByBrand = {};
+    ALL_SERVERS.forEach(srv => {
+      if (!known.has(srv)) {
+        const brand = srv.split(/[- ]/)[0].trim() || "Other";
+        if (!extrasByBrand[brand]) extrasByBrand[brand] = [];
+        extrasByBrand[brand].push(srv);
       }
-    }
+    });
+    Object.keys(extrasByBrand).forEach(brand => {
+      const existing = BROKER_COMPANIES.find(c => (c.brand || "").toLowerCase() === brand.toLowerCase());
+      if (existing) {
+        extrasByBrand[brand].forEach(s => {
+          if (!existing.servers.includes(s)) existing.servers.push(s);
+        });
+      } else {
+        BROKER_COMPANIES.push({
+          company: brand + " Financial Services",
+          brand: brand,
+          region: "MT5 Trade Server",
+          servers: extrasByBrand[brand]
+        });
+      }
+    });
+  })();
+
+  function getUniqueBrands() {
+    const seen = new Set();
+    const out = [];
+    BROKER_COMPANIES.forEach(c => {
+      if (c.brand && !seen.has(c.brand)) {
+        seen.add(c.brand);
+        out.push(c.brand);
+      }
+    });
+    return out;
   }
 
-  function onServerInput(val) {
-    const brokerInput = document.getElementById("input-broker");
-    if (!brokerInput.value && val && val.includes("-")) {
-      brokerInput.value = inferBrokerFromServer(val);
-    }
+  function renderBrandPills() {
+    const bar = document.getElementById("brand-pills-bar");
+    if (!bar) return;
+    const brands = getUniqueBrands();
+    let html = `<button type="button" class="brand-pill ${activeBrandFilter === '' ? 'active' : ''}" onclick="setBrandFilter('')">All Brokers (${BROKER_COMPANIES.length})</button>`;
+    brands.forEach(b => {
+      const active = activeBrandFilter.toLowerCase() === b.toLowerCase() ? "active" : "";
+      html += `<button type="button" class="brand-pill ${active}" onclick="setBrandFilter('${b.replace(/'/g, "\\'")}')">${b}</button>`;
+    });
+    bar.innerHTML = html;
   }
 
-  function onBrokerInput(brokerVal) {
-    const q = (brokerVal || "").trim().toLowerCase();
-    const dl = document.getElementById("server-list");
-    if (!dl) return;
-    const matches = ALL_SERVERS.filter(s => !q || s.toLowerCase().includes(q));
-    const listToShow = matches.length ? matches : ALL_SERVERS;
-    dl.innerHTML = listToShow.map(s => {
-      const isLocal = LOCAL_SERVERS.includes(s);
-      return `<option value="${s}">${isLocal ? "★ Discovered on this PC" : ""}</option>`;
+  function setBrandFilter(brand) {
+    activeBrandFilter = brand;
+    const searchInput = document.getElementById("modal-broker-search");
+    if (searchInput && brand) {
+      searchInput.value = brand;
+    } else if (searchInput && !brand) {
+      searchInput.value = "";
+    }
+    renderBrandPills();
+    renderBrokerCompanies();
+  }
+
+  function openBrokerModal() {
+    const modal = document.getElementById("broker-modal");
+    modal.classList.add("open");
+    renderBrandPills();
+    renderBrokerCompanies();
+    setTimeout(() => {
+      const s = document.getElementById("modal-broker-search");
+      if (s) { s.focus(); s.select(); }
+    }, 40);
+  }
+
+  function closeBrokerModal() {
+    document.getElementById("broker-modal").classList.remove("open");
+  }
+
+  function renderBrokerCompanies() {
+    const q = (document.getElementById("modal-broker-search").value || "").trim().toLowerCase();
+    const container = document.getElementById("company-list-container");
+    const countEl = document.getElementById("company-results-count");
+
+    const filtered = BROKER_COMPANIES.filter((c, idx) => {
+      c._idx = idx;
+      if (!q) return true;
+      const inCompany = (c.company || "").toLowerCase().includes(q);
+      const inBrand = (c.brand || "").toLowerCase().includes(q);
+      const inRegion = (c.region || "").toLowerCase().includes(q);
+      const inServers = (c.servers || []).some(s => s.toLowerCase().includes(q));
+      return inCompany || inBrand || inRegion || inServers;
+    });
+
+    countEl.textContent = `Showing ${filtered.length} broker compan${filtered.length === 1 ? 'y' : 'ies'} — click a company (or any server chip) to load its servers into the login dropdown:`;
+
+    if (!filtered.length) {
+      container.innerHTML = `
+        <div class="company-item" onclick="selectCustomBroker('${q.replace(/'/g, "\\'")}')">
+          <div class="company-top">
+            <div class="company-title">
+              <span class="company-avatar">+</span>
+              <div>
+                <div>Use Custom Broker "${q || 'Custom'}"</div>
+                <div class="muted">Click to enter a custom broker &amp; server name</div>
+              </div>
+            </div>
+            <button type="button">Select Custom →</button>
+          </div>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = filtered.map(c => {
+      const initials = (c.brand || c.company || "MT").slice(0, 2).toUpperCase();
+      const srvList = c.servers || [];
+      const chipsHtml = srvList.map(s =>
+        `<span class="server-chip" onclick="event.stopPropagation(); selectBrokerCompany(${c._idx}, '${s.replace(/'/g, "\\'")}')" title="Select ${c.company} with server ${s}">${s}</span>`
+      ).join("");
+      return `
+        <div class="company-item" onclick="selectBrokerCompany(${c._idx}, null)">
+          <div class="company-top">
+            <div class="company-title">
+              <span class="company-avatar">${initials}</span>
+              <div>
+                <div>${c.company}</div>
+                <div class="muted">${c.brand} · ${c.region || 'MT5 Broker'} · <strong>${srvList.length} server${srvList.length === 1 ? '' : 's'}</strong></div>
+              </div>
+            </div>
+            <button type="button" onclick="event.stopPropagation(); selectBrokerCompany(${c._idx}, null)">
+              Select Company →
+            </button>
+          </div>
+          <div class="server-chips">${chipsHtml}</div>
+        </div>
+      `;
     }).join("");
+  }
+
+  function populateServerDropdown(servers, preferredServer) {
+    const sel = document.getElementById("select-server");
+    const hiddenServer = document.getElementById("input-server");
+    const customInput = document.getElementById("input-custom-server");
+    customInput.style.display = "none";
+
+    const list = (servers && servers.length) ? servers : ALL_SERVERS;
+    const chosen = preferredServer && list.includes(preferredServer) ? preferredServer : (list[0] || "");
+
+    let opts = list.map(s =>
+      `<option value="${s}" ${s === chosen ? 'selected' : ''}>${s}</option>`
+    ).join("");
+    opts += `<option value="__custom__">+ Enter custom server name...</option>`;
+    sel.innerHTML = opts;
+
+    hiddenServer.value = chosen;
+  }
+
+  function selectBrokerCompany(idx, preferredServer) {
+    const comp = BROKER_COMPANIES[idx];
+    if (!comp) return;
+    document.getElementById("input-broker-display").value = `${comp.company} (${comp.servers.length} servers)`;
+    document.getElementById("input-broker").value = comp.brand || comp.company;
+    populateServerDropdown(comp.servers, preferredServer);
+    closeBrokerModal();
+    document.getElementById("select-server").focus();
+  }
+
+  function selectCustomBroker(rawName) {
+    const name = rawName || "CustomBroker";
+    document.getElementById("input-broker-display").value = name;
+    document.getElementById("input-broker").value = name;
+    populateServerDropdown(ALL_SERVERS, null);
+    document.getElementById("select-server").value = "__custom__";
+    onServerDropdownChange("__custom__");
+    closeBrokerModal();
+  }
+
+  function onServerDropdownChange(val) {
+    const hiddenServer = document.getElementById("input-server");
+    const customInput = document.getElementById("input-custom-server");
+    if (val === "__custom__") {
+      customInput.style.display = "block";
+      customInput.required = true;
+      customInput.focus();
+      hiddenServer.value = customInput.value.trim();
+    } else {
+      customInput.style.display = "none";
+      customInput.required = false;
+      hiddenServer.value = val;
+    }
+  }
+
+  function beforeAddAccountSubmit() {
+    const brokerVal = document.getElementById("input-broker").value.trim();
+    const serverVal = document.getElementById("input-server").value.trim();
+    if (!brokerVal) {
+      openBrokerModal();
+      return false;
+    }
+    if (!serverVal) {
+      alert("Please select a Trade Server from the dropdown menu.");
+      return false;
+    }
+    return true;
+  }
+
+  // Pre-select the first broker company by default so the server dropdown is immediately ready
+  if (BROKER_COMPANIES.length > 0) {
+    const first = BROKER_COMPANIES[0];
+    document.getElementById("input-broker-display").value = `${first.company} (${first.servers.length} servers)`;
+    document.getElementById("input-broker").value = first.brand || first.company;
+    populateServerDropdown(first.servers, null);
   }
 </script>
 {% endblock %}
