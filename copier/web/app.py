@@ -46,7 +46,19 @@ from .auth import (
     verify_csrf,
 )
 
-TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
+def _resolve_templates_dir() -> Path:
+    here = Path(__file__).resolve().parent / "templates"
+    if here.is_dir():
+        return here
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        bundled = Path(meipass) / "copier" / "web" / "templates"
+        if bundled.is_dir():
+            return bundled
+    return here
+
+
+TEMPLATES_DIR = _resolve_templates_dir()
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 app = FastAPI(title="MT5 Trade Copier Dashboard")
@@ -142,8 +154,9 @@ def _run_connect(account_id: int) -> accounts.ConnectResult:
     if acc.enabled and _supervisor_running():
         return _connect_via_worker(account_id)
     try:
+        from ..supervisor import build_worker_cmd
         proc = subprocess.run(
-            [sys.executable, "-m", "copier.worker", "--account-id", str(account_id), "--connect-only"],
+            build_worker_cmd(account_id, connect_only=True),
             capture_output=True,
             text=True,
             timeout=70,

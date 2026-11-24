@@ -21,14 +21,32 @@ from functools import lru_cache
 from pathlib import Path
 
 
+def _is_writable_dir(path: Path) -> bool:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / ".write_probe"
+        probe.write_bytes(b"1")
+        probe.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
+
+
 def _default_data_dir() -> Path:
     env = os.environ.get("TC_DATA_DIR")
     if env:
         return Path(env).expanduser().resolve()
     if os.environ.get("VERCEL"):
         return Path("/tmp/TradeCopier")
-    if sys.platform == "win32" and os.environ.get("ProgramData"):
-        return Path(os.environ["ProgramData"]) / "TradeCopier"
+    if sys.platform == "win32":
+        prog_data = os.environ.get("ProgramData")
+        if prog_data:
+            candidate = Path(prog_data) / "TradeCopier"
+            if _is_writable_dir(candidate):
+                return candidate
+        local_app = os.environ.get("LOCALAPPDATA")
+        if local_app:
+            return Path(local_app) / "TradeCopier"
     return Path.cwd() / "data"
 
 

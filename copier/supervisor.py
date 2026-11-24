@@ -91,6 +91,39 @@ class ConnectivityMonitor:
         return None, 0.0
 
 
+def is_frozen() -> bool:
+    return bool(getattr(sys, "frozen", False))
+
+
+def build_web_cmd(host: str, port: int) -> list[str]:
+    if is_frozen():
+        return [sys.executable, "--role", "web", "--host", host, "--port", str(port)]
+    return [
+        sys.executable, "-m", "uvicorn", "copier.web.app:app",
+        "--host", host, "--port", str(port),
+        "--log-level", "warning",
+    ]
+
+
+def build_worker_cmd(account_id: int, bus_port: int = DEFAULT_EVENT_PORT,
+                     *, connect_only: bool = False) -> list[str]:
+    if is_frozen():
+        cmd = [
+            sys.executable, "--role", "worker",
+            "--account-id", str(account_id),
+            "--bus-port", str(bus_port),
+        ]
+    else:
+        cmd = [
+            sys.executable, "-m", "copier.worker",
+            "--account-id", str(account_id),
+            "--bus-port", str(bus_port),
+        ]
+    if connect_only:
+        cmd.append("--connect-only")
+    return cmd
+
+
 @dataclass
 class SupervisedChild:
     name: str
@@ -134,11 +167,7 @@ class Supervisor:
             if key not in self.children:
                 self.children[key] = SupervisedChild(
                     name=key,
-                    cmd=[
-                        sys.executable, "-m", "copier.worker",
-                        "--account-id", str(acc.id),
-                        "--bus-port", str(self.bus_port),
-                    ],
+                    cmd=build_worker_cmd(acc.id, self.bus_port),
                 )
 
     def _ensure_children_running(self) -> None:
@@ -189,11 +218,7 @@ class Supervisor:
         await self.hub.start()
         self.children["web"] = SupervisedChild(
             name="web",
-            cmd=[
-                sys.executable, "-m", "uvicorn", "copier.web.app:app",
-                "--host", self.web_host, "--port", str(self.web_port),
-                "--log-level", "warning",
-            ],
+            cmd=build_web_cmd(self.web_host, self.web_port),
         )
         self._set_app_state("internet_online", "1")
         self._set_app_state("global_paused", "0")
