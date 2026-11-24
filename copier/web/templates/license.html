@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}License & Subscription · MT5 Trade Copier{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1rem;">
+    <div>
+      <h2 style="margin-bottom:0.25rem;">Device License &amp; Subscription</h2>
+      <p class="muted" style="margin:0;">
+        Every license key is cryptographically locked to a single computer's <strong>Device ID</strong> and includes an automatic expiry date.
+        To renew or extend your subscription, simply paste your new license key below—all your accounts and rules stay intact.
+      </p>
+    </div>
+    {% if lic.valid %}
+      <span class="badge connected" style="font-size:0.9rem;padding:0.4rem 0.9rem;">
+        ● ACTIVE · {{ lic.days_left }} days left
+      </span>
+    {% elif lic.expired %}
+      <span class="badge error" style="font-size:0.9rem;padding:0.4rem 0.9rem;">
+        ● EXPIRED · Renewal Required
+      </span>
+    {% else %}
+      <span class="badge error" style="font-size:0.9rem;padding:0.4rem 0.9rem;">
+        ● NOT ACTIVATED
+      </span>
+    {% endif %}
+  </div>
+
+  <!-- Device ID Box -->
+  <div style="background:var(--input-bg);border:1px solid var(--border);border-radius:9px;padding:1rem 1.15rem;margin-bottom:1.25rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;">
+    <div>
+      <div class="muted" style="font-size:0.78rem;text-transform:uppercase;font-weight:700;letter-spacing:0.04em;">
+        This Computer's Unique Device ID (Send this to get or renew your License Key)
+      </div>
+      <div style="font-size:1.25rem;font-weight:800;color:var(--accent);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;margin-top:0.2rem;" id="device-id-text">{{ lic.device_id }}</div>
+    </div>
+    <button type="button" class="secondary" onclick="copyText('device-id-text', this)">
+      📋 Copy Device ID
+    </button>
+  </div>
+
+  <!-- Current Subscription Details -->
+  <table>
+    <tbody>
+      <tr>
+        <th style="width:220px;">Status</th>
+        <td>
+          {% if lic.valid %}
+            <strong style="color:var(--badge-ok-fg);">Active Subscription</strong> — {{ lic.reason }}
+          {% else %}
+            <strong style="color:var(--badge-err-fg);">{{ lic.reason }}</strong>
+          {% endif %}
+        </td>
+      </tr>
+      <tr>
+        <th>Licensed Client</th>
+        <td>{{ lic.client_name or "-" }}</td>
+      </tr>
+      <tr>
+        <th>Bound Device ID</th>
+        <td><code>{{ lic.bound_device_id or lic.device_id }}</code> (Single-Device Lock)</td>
+      </tr>
+      <tr>
+        <th>Expiry Date (UTC)</th>
+        <td>
+          {% if lic.expires_at %}
+            <strong>{{ lic.expires_at.strftime("%Y-%m-%d %H:%M UTC") }}</strong>
+            ({{ lic.days_left }} days remaining)
+          {% else %}
+            -
+          {% endif %}
+        </td>
+      </tr>
+      <tr>
+        <th>Max Slave Accounts</th>
+        <td>Up to {{ lic.max_slaves }} slave accounts</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Activate / Renew License Key Form -->
+  <form method="post" action="/license/activate" style="margin-top:1.35rem;">
+    <input type="hidden" name="csrf" value="{{ session.csrf }}">
+    <div class="field" style="margin-bottom:0.85rem;">
+      <label for="input-license-key">Enter or Paste New License Key to Activate / Renew Subscription</label>
+      <input id="input-license-key" name="license_key" type="text"
+             placeholder="TCLK-eyJ..." required
+             style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;">
+    </div>
+    <button type="submit">🔑 Activate / Renew License Key</button>
+  </form>
+</div>
+
+{% if can_generate_keys %}
+<div class="card">
+  <h3 style="color:var(--accent);">Vendor Admin: Generate Client License Key</h3>
+  <p class="muted" style="margin-top:-0.25rem;margin-bottom:1rem;">
+    This generator is visible <strong>only on your vendor laptop</strong> (because your private signing key
+    <code>license_vendor_private.pem</code> is present here and is never included in <code>TradeCopier.exe</code>).
+    Ask your client for their <strong>Device ID</strong> (<code>TC-HWID-...</code>), enter how many days their subscription lasts, and send them the generated key.
+  </p>
+
+  <form method="post" action="/license/generate" class="grid-form">
+    <input type="hidden" name="csrf" value="{{ session.csrf }}">
+    <div class="field" style="grid-column: span 2;">
+      <label>Client's Device ID (HWID)</label>
+      <input name="target_device_id" value="{{ generated_for_hwid or lic.device_id }}"
+             placeholder="TC-HWID-XXXX-XXXX-XXXX" required
+             style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;">
+    </div>
+    <div class="field">
+      <label>Client Name / Label</label>
+      <input name="client_name" value="{{ generated_client or '' }}" placeholder="e.g. Rahul Sharma" required>
+    </div>
+    <div class="field">
+      <label>Subscription Duration</label>
+      <select name="days">
+        <option value="1">1 Day (24h Test)</option>
+        <option value="7">7 Days (1 Week Trial)</option>
+        <option value="15">15 Days</option>
+        <option value="30" selected>30 Days (1 Month)</option>
+        <option value="90">90 Days (3 Months)</option>
+        <option value="180">180 Days (6 Months)</option>
+        <option value="365">365 Days (1 Year)</option>
+        <option value="3650">3650 Days (10 Years / Lifetime)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Max Slaves Allowed</label>
+      <input name="max_slaves" type="number" min="1" max="50" value="10" required>
+    </div>
+    <div>
+      <button type="submit" style="width:100%;">⚡ Generate License Key</button>
+    </div>
+  </form>
+
+  {% if generated_key %}
+  <div style="margin-top:1.25rem;background:var(--input-bg);border:1px solid var(--accent);border-radius:9px;padding:1rem 1.15rem;">
+    <div class="muted" style="font-size:0.8rem;font-weight:700;margin-bottom:0.35rem;">
+      Generated Single-Device License Key for <strong>{{ generated_client }}</strong> (Device <code>{{ generated_for_hwid }}</code> · Expires {{ generated_expires }}):
+    </div>
+    <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;">
+      <code id="generated-key-text" style="flex:1;word-break:break-all;padding:0.55rem 0.75rem;font-size:0.86rem;">{{ generated_key }}</code>
+      <button type="button" onclick="copyText('generated-key-text', this)">📋 Copy License Key</button>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<script>
+  function copyText(elId, btn) {
+    var text = document.getElementById(elId).innerText.trim();
+    navigator.clipboard.writeText(text).then(function() {
+      var orig = btn.innerText;
+      btn.innerText = "✓ Copied!";
+      setTimeout(function() { btn.innerText = orig; }, 1800);
+    });
+  }
+</script>
+{% endblock %}

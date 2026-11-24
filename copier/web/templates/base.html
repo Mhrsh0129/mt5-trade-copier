@@ -202,6 +202,13 @@
       <a href="/trades" class="{% if nav == 'trades' %}active{% endif %}">Live Trades</a>
       <a href="/logs" class="{% if nav == 'logs' %}active{% endif %}">Logs</a>
       <a href="/system" class="{% if nav == 'system' %}active{% endif %}">System</a>
+      <a href="/license" class="{% if nav == 'license' %}active{% endif %}">
+        {% if lic is defined and lic %}
+          {% if lic.valid %}🔑 License ({{ lic.days_left }}d){% else %}⚠ Activate License{% endif %}
+        {% else %}
+          🔑 License
+        {% endif %}
+      </a>
       <button type="button" class="theme-toggle" onclick="toggleTheme()" id="theme-toggle-btn" title="Switch Light (Blue & White) / Dark (Black & Yellow) theme">
         ◐ Theme
       </button>

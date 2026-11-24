@@ -27,6 +27,7 @@ from .alerts.outbox import enqueue_alert, flush_outbox, record_event_log
 from .alerts.telegram import ping_heartbeat
 from .bus import DEFAULT_EVENT_PORT, HubServer, Publisher
 from .db import AppSetting, init_db, session_scope
+from .license import get_installed_license_status
 from .logging_setup import setup_logging
 
 log = logging.getLogger(__name__)
@@ -153,6 +154,14 @@ class Supervisor:
 
     def _sync_worker_children(self) -> None:
         if not self.spawn_workers:
+            return
+        lic = get_installed_license_status()
+        if not lic.valid:
+            # Stop any running account workers if the license is missing or expired
+            for key in list(self.children.keys()):
+                if key.startswith("account_"):
+                    log.warning("Stopping %s because license is not valid: %s", key, lic.reason)
+                    self._stop_child(self.children.pop(key))
             return
         active_accounts = [a for a in accounts.list_accounts() if a.enabled]
         desired_keys = {f"account_{a.id}": a for a in active_accounts}

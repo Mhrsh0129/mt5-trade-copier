@@ -118,6 +118,44 @@ def cmd_account_reprovision(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_license_status(_args: argparse.Namespace) -> int:
+    from .license import get_installed_license_status
+    init_db()
+    st = get_installed_license_status()
+    print(f"Device ID : {st.device_id}")
+    print(f"Valid     : {st.valid}")
+    print(f"Client    : {st.client_name or '-'}")
+    print(f"Expires   : {st.expires_at.isoformat() if st.expires_at else '-'}")
+    print(f"Status    : {st.reason}")
+    return 0 if st.valid else 2
+
+
+def cmd_license_activate(args: argparse.Namespace) -> int:
+    from .license import activate_license_key
+    init_db()
+    st = activate_license_key(args.key)
+    print(("✅ " if st.valid else "❌ ") + st.reason)
+    return 0 if st.valid else 2
+
+
+def cmd_license_issue(args: argparse.Namespace) -> int:
+    from .license import get_device_id, issue_license_key, normalize_device_id, verify_license_key
+    hwid = normalize_device_id(args.device_id or get_device_id())
+    key = issue_license_key(
+        device_id=hwid,
+        days=args.days,
+        expires_at=args.expires_at,
+        client_name=args.client,
+        max_slaves=args.max_slaves,
+    )
+    st = verify_license_key(key, current_device_id=hwid)
+    print(f"Client    : {st.client_name}")
+    print(f"Device ID : {hwid}")
+    print(f"Expires   : {st.expires_at.strftime('%Y-%m-%d %H:%M UTC') if st.expires_at else '-'}")
+    print(f"Key       : {key}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="tc", description="MT5 trade copier")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -154,6 +192,19 @@ def build_parser() -> argparse.ArgumentParser:
     ar.add_argument("id", type=int)
     ar.add_argument("--force", action="store_true", help="delete and re-copy the terminal folder")
     ar.set_defaults(fn=cmd_account_reprovision)
+
+    lic = sub.add_parser("license").add_subparsers(dest="lcmd", required=True)
+    lic.add_parser("status").set_defaults(fn=cmd_license_status)
+    la = lic.add_parser("activate")
+    la.add_argument("key", help="TCLK-... license key string")
+    la.set_defaults(fn=cmd_license_activate)
+    li = lic.add_parser("issue")
+    li.add_argument("--device-id", help="Client's TC-HWID-XXXX-XXXX-XXXX (defaults to this PC)")
+    li.add_argument("--client", default="Client", help="Client name or label")
+    li.add_argument("--days", type=float, default=30.0, help="Subscription duration in days (default: 30)")
+    li.add_argument("--expires-at", help="Optional explicit UTC expiry date (YYYY-MM-DD)")
+    li.add_argument("--max-slaves", type=int, default=10, help="Max slave accounts (default: 10)")
+    li.set_defaults(fn=cmd_license_issue)
     return p
 
 

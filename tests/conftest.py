@@ -8,6 +8,7 @@ from copier.db import dispose_all, init_db
 def data_dir(tmp_path, monkeypatch):
     """Every test gets an isolated data dir, key and DB."""
     monkeypatch.setenv("TC_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("TC_SKIP_LICENSE_CHECK", "1")
     config.reset_paths_cache()
     crypto.clear_cache()
     yield tmp_path / "data"

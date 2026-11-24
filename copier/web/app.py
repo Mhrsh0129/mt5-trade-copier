@@ -36,6 +36,14 @@ from ..engine.rules import (
 )
 from ..terminals.discovery import BROKER_COMPANIES, CURATED_BROKER_SERVERS, discover_mt5_environment
 from ..terminals.provision import terminal_memory_mb
+from ..license import (
+    activate_license_key,
+    get_installed_license_status,
+    has_vendor_private_key,
+    issue_license_key,
+    normalize_device_id,
+    verify_license_key,
+)
 from .auth import (
     SESSION_COOKIE,
     SESSION_MAX_AGE,
@@ -188,10 +196,12 @@ def _redirect(url: str, *, ok: str | None = None, err: str | None = None, warn: 
 
 def _ctx(request: Request, nav: str, **extra) -> dict:
     init_db()
+    lic = extra.pop("lic", None) or get_installed_license_status()
     return {
         "request": request,
         "session": read_session(request),
         "nav": nav,
+        "lic": lic,
         "flash_ok": request.query_params.get("ok"),
         "flash_err": request.query_params.get("err"),
         "flash_warn": request.query_params.get("warn"),
@@ -259,11 +269,15 @@ def health_endpoint():
         global_paused = (paused_row.value == "1") if paused_row else False
 
     error_accounts = [a.id for a in accs if a.enabled and a.status == "error"]
-    healthy = internet_online and not error_accounts
+    lic = get_installed_license_status()
+    healthy = internet_online and not error_accounts and lic.valid
     payload = {
         "healthy": healthy,
         "internet_online": internet_online,
         "global_paused": global_paused,
+        "license_valid": lic.valid,
+        "license_days_left": lic.days_left,
+        "device_id": lic.device_id,
         "accounts": [
             {
                 "id": a.id,
@@ -332,6 +346,13 @@ def account_add_submit(
     password: str = Form(...),
 ):
     verify_csrf(request, csrf)
+    lic = get_installed_license_status()
+    if not lic.valid:
+        return _redirect("/license", err=f"License required before adding accounts: {lic.reason}")
+    if role.lower().strip() == "slave":
+        current_slaves = sum(1 for a in accounts.list_accounts() if a.role == "slave")
+        if current_slaves >= lic.max_slaves:
+            return _redirect("/accounts", err=f"Your license allows up to {lic.max_slaves} slave accounts.")
     try:
         # If the user typed a broker label (e.g. "Exness" or "XMGlobal") that isn't a template name yet,
         # automatically bind it to the first discovered MT5 installation on this PC so they never get an error.
@@ -356,6 +377,9 @@ def account_add_submit(
 @app.post("/accounts/{account_id}/connect")
 def account_connect_submit(request: Request, account_id: int, csrf: str = Form(...)):
     verify_csrf(request, csrf)
+    lic = get_installed_license_status()
+    if not lic.valid:
+        return _redirect("/license", err=f"License expired or not activated: {lic.reason}")
     res = _run_connect(account_id)
     warn = " | ".join(res.warnings) if res.warnings else None
     if res.success:
@@ -568,3 +592,89 @@ def system_alerts_submit(
     set_telegram_config(bot_token.strip() or (existing_tok or ""), chat_id.strip())
     set_heartbeat_url(heartbeat_url.strip())
     return _redirect("/system", ok="Alert and heartbeat settings saved.")
+
+
+# ================================================================ License & Subscription
+@app.get("/license", response_class=HTMLResponse)
+def license_page(request: Request):
+    require_user(request)
+    lic = get_installed_license_status()
+    return templates.TemplateResponse(
+        request,
+        "license.html",
+        _ctx(
+            request,
+            "license",
+            lic=lic,
+            can_generate_keys=has_vendor_private_key(),
+            generated_key=None,
+            generated_client=None,
+            generated_for_hwid=None,
+            generated_expires=None,
+        ),
+    )
+
+
+@app.post("/license/activate")
+def license_activate_submit(
+    request: Request,
+    csrf: str = Form(...),
+    license_key: str = Form(...),
+):
+    verify_csrf(request, csrf)
+    status = activate_license_key(license_key)
+    if not status.valid:
+        return _redirect("/license", err=f"License activation failed: {status.reason}")
+    _bus_pub.publish_sync("control", {"cmd": "global_pause", "paused": False})
+    exp_str = status.expires_at.strftime("%Y-%m-%d %H:%M UTC") if status.expires_at else ""
+    record_event_log(
+        f"Activated license for '{status.client_name}' on {status.device_id} (expires {exp_str})",
+        source="web",
+    )
+    return _redirect(
+        "/license",
+        ok=f"License activated for {status.client_name}! Valid until {exp_str} ({status.days_left} days left).",
+    )
+
+
+@app.post("/license/generate", response_class=HTMLResponse)
+def license_generate_submit(
+    request: Request,
+    csrf: str = Form(...),
+    target_device_id: str = Form(...),
+    client_name: str = Form(...),
+    days: float = Form(30),
+    max_slaves: int = Form(10),
+):
+    verify_csrf(request, csrf)
+    if not has_vendor_private_key():
+        return _redirect("/license", err="License generation is only available on the vendor admin machine.")
+    try:
+        norm_hwid = normalize_device_id(target_device_id)
+        key = issue_license_key(
+            device_id=norm_hwid,
+            days=days,
+            client_name=client_name,
+            max_slaves=max_slaves,
+        )
+        chk = verify_license_key(key, current_device_id=norm_hwid)
+        exp_str = chk.expires_at.strftime("%Y-%m-%d %H:%M UTC") if chk.expires_at else ""
+    except Exception as e:  # noqa: BLE001
+        return _redirect("/license", err=f"Could not generate key: {e}")
+
+    lic = get_installed_license_status()
+    return templates.TemplateResponse(
+        request,
+        "license.html",
+        _ctx(
+            request,
+            "license",
+            lic=lic,
+            can_generate_keys=True,
+            generated_key=key,
+            generated_client=client_name,
+            generated_for_hwid=norm_hwid,
+            generated_expires=exp_str,
+        ),
+    )
+
